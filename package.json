@@ -1,0 +1,33 @@
+{
+  "name": "suinfi-be-js",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js",
+    "seed": "node src/seed/seedServicesAndCategories.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MunozRodrigoMauro/SUINFI-BE-JS.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/MunozRodrigoMauro/SUINFI-BE-JS/issues"
+  },
+  "homepage": "https://github.com/MunozRodrigoMauro/SUINFI-BE-JS#readme",
+  "dependencies": {
+    "@faker-js/faker": "^9.9.0",
+    "bcrypt": "^6.0.0",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "express-validator": "^7.2.1",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.16.4",
+    "nodemon": "^3.1.10"
+  }
+}
