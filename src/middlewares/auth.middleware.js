@@ -1,7 +1,8 @@
 import jwt from "jsonwebtoken";
+import UserModel from "../models/User.js"
 
 // Middleware para verificar el token JWT
-export const verifyToken = (req, res, next) => {
+export const verifyToken = async (req, res, next) => {
   try {
     // 🔍 Leemos el token del header "Authorization"
     const authHeader = req.headers.authorization;
@@ -16,12 +17,12 @@ export const verifyToken = (req, res, next) => {
 
     // 🔐 Verificamos el token con la clave secreta
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // ✅ Agregamos los datos del usuario al objeto `req`
-    req.user = decoded;
-
-    // 🟢 Pasamos al siguiente middleware o ruta protegida
-    next();
+    
+    // 🟩 Obtenemos el usuario
+    const user = await UserModel.findById(decoded.id).select("-password")
+    if (!user) return res.status(404).json({ message: "Usuario no encontrado" })
+    
+    res.status(200).json({ user })
   } catch (error) {
     console.error("❌ Error en verificación de token:", error);
     return res.status(401).json({ message: "Invalid or expired token" });
