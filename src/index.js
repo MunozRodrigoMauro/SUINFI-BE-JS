@@ -1,4 +1,5 @@
 // Importamos las dependencias principales
+import cors from "cors"; // Importamos cors
 import express from "express";           // Framework para crear el servidor HTTP
 import mongoose from "mongoose";         // ODM para conectarse y trabajar con MongoDB
 import dotenv from "dotenv";             // Permite usar variables de entorno desde .env
@@ -13,22 +14,22 @@ import favoritesRoutes from "./routes/favorite.routes.js"; // Importamos las rut
 import chatRoutes from "./routes/chat.routes.js"; // Importamos las rutas de chats
 import notificationRoutes from "./routes/notification.routes.js"; // Importamos las rutas de notificaciones
 import paymentRoutes from "./routes/payments.routes.js"; // Importamos las rutas de pagos
-import cors from "cors"; // Importamos cors
 
 dotenv.config(); // Carga las variables de entorno del archivo .env
 
 const app = express(); // Creamos la aplicación de Express
 
 app.use(express.json()); // Permite que el servidor entienda JSON en las peticiones
-// 📌 Middleware para usar el router de usuarios
-// Todas las rutas dentro de user.routes.js estarán bajo /api/users
-app.use("/api/users", userRoutes);
 
 // ... debajo de app.use(express.json());
 app.use(cors({
   origin: "http://localhost:5173", // habilitá el frontend
   credentials: true, // si vas a usar cookies (por ahora opcional)
 }));
+
+// 📌 Middleware para usar el router de usuarios
+// Todas las rutas dentro de user.routes.js estarán bajo /api/users
+app.use("/api/users", userRoutes);
 
 // 📌 Middleware para usar el router de autenticación
 // Todas las rutas dentro de auth.routes.js estarán bajo /api/auth

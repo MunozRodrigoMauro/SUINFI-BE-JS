@@ -1,7 +1,7 @@
 console.log("🧪 Cargando auth.routes.js...");
 
 import express from "express"; // Importamos express para crear rutas
-import { loginUser,  } from "../controllers/auth.controller.js"; // Importamos el controlador de login
+import { loginUser } from "../controllers/auth.controller.js"; // Importamos el controlador de login
 import { verifyToken } from "../middlewares/auth.middleware.js"; // Importamos el middleware de verificación de token
 
 const router = express.Router(); // Creamos una instancia del router

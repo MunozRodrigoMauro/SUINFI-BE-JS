@@ -15,8 +15,16 @@ export const userValidationRules = [
 
   // 📌 Validamos que la contraseña tenga mínimo 6 caracteres
   body("password")
-    .isLength({ min: 6 })
-    .withMessage("Password must be at least 6 characters"),
+    .isLength({ min: 8 })
+    .withMessage("La contraseña debe tener al menos 8 caracteres.")
+    .matches(/[a-z]/)
+    .withMessage("La contraseña debe contener al menos una letra minúscula.")
+    .matches(/[A-Z]/)
+    .withMessage("La contraseña debe contener al menos una letra mayúscula.")
+    .matches(/\d/)
+    .withMessage("La contraseña debe contener al menos un número.")
+    .matches(/[!@#$%^&*]/)
+    .withMessage("La contraseña debe contener al menos un carácter especial (!@#$%^&*)"),
 
   // 🟩 Buena práctica: validamos que el role sea uno válido
   body("role")

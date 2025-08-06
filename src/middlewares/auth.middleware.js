@@ -22,7 +22,9 @@ export const verifyToken = async (req, res, next) => {
     const user = await UserModel.findById(decoded.id).select("-password")
     if (!user) return res.status(404).json({ message: "Usuario no encontrado" })
     
-    res.status(200).json({ user })
+    req.user = user
+    next()
+    
   } catch (error) {
     console.error("❌ Error en verificación de token:", error);
     return res.status(401).json({ message: "Invalid or expired token" });

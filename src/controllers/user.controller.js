@@ -2,6 +2,7 @@
 // Este modelo representa cómo se guarda un usuario en MongoDB
 import UserModel from "../models/User.js";
 import bcrypt from "bcrypt"; // Librería para encriptar contraseñas
+import jwt from "jsonwebtoken";
 
 // 🟩 BUENA PRÁCTICA: Cada función del controlador maneja una ruta específica.
 
@@ -14,9 +15,15 @@ export const createUser = async (req, res) => {
     const { name, email, password, role } = req.body;
 
     // Validamos que los campos obligatorios estén presentes
-    if (!name || !email || !password) { 
+    if (!name || !email || !password || !role) { 
       // Si falta alguno, respondemos con estado 400 (Bad Request)
       return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    // Verificamos si el email ya está registrado
+    const userExist = await UserModel.findOne({ email });
+    if (userExist) {
+      return res.status(409).json({ message: "Email already registered" });
     }
 
     // 🔐 Encriptamos la contraseña antes de guardarla
@@ -34,8 +41,20 @@ export const createUser = async (req, res) => {
     // Guardamos el usuario en la base de datos con await (esperamos la promesa)
     const savedUser = await user.save(); // Método de Mongoose para insertar en MongoDB
 
-     // 🟩 NUNCA devolvemos la contraseña al frontend
-     const userToReturn = {
+    // 🟢 Generar token igual que en login
+    const token = jwt.sign(
+      {
+        id: savedUser._id,
+        role: savedUser.role,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: process.env.JWT_EXPIRES_IN,
+      }
+    );
+
+    // 🟩 NUNCA devolvemos la contraseña al frontend
+    const userToReturn = {
       _id: savedUser._id,
       name: savedUser.name,
       email: savedUser.email,
@@ -44,7 +63,7 @@ export const createUser = async (req, res) => {
     };
 
     // Respondemos al cliente con estado 201 (Created) y el usuario creado
-    return res.status(201).json(userToReturn);
+    return res.status(201).json({ userToReturn, token });
   } catch (error) {
     // Si ocurre un error, respondemos con estado 500 (Internal Server Error)
     return res.status(500).json({ message: "Server error", error });
