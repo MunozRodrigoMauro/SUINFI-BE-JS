@@ -1,119 +1,159 @@
-import BookingModel from "../models/Booking.js";
-import ProfessionalModel from "../models/Professional.js";
-import ServiceModel from "../models/Service.js";
+// src/controllers/booking.controller.js
+import mongoose from "mongoose";
+import Booking from "../models/Booking.js";
+import Professional from "../models/Professional.js";
+import Service from "../models/Service.js";
 
+/**
+ * POST /api/bookings
+ * Crea una reserva (cliente -> profesional)
+ * body: { professionalId, serviceId, scheduledAt, note, address }
+ */
 export const createBooking = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const { professional, service, date, notes, location } = req.body;
+    const clientId = req.user.id;
+    const { professionalId, serviceId, scheduledAt, note = "", address = "" } = req.body;
 
-    if (!professional || !service || !date) {
-      return res.status(400).json({ error: "Faltan campos requeridos" });
+    if (!professionalId || !serviceId || !scheduledAt) {
+      return res.status(400).json({ message: "professionalId, serviceId y scheduledAt son obligatorios" });
+    }
+    if (!mongoose.Types.ObjectId.isValid(professionalId) || !mongoose.Types.ObjectId.isValid(serviceId)) {
+      return res.status(400).json({ message: "IDs inválidos" });
     }
 
-    const bookingDate = new Date(date);
-    const now = new Date();
+    const prof = await Professional.findById(professionalId).populate("user", "name email");
+    if (!prof) return res.status(404).json({ message: "Professional no encontrado" });
 
-    if (bookingDate <= now) {
-      return res.status(400).json({ error: "No se puede reservar en el pasado" });
-    }
+    const serv = await Service.findById(serviceId);
+    if (!serv) return res.status(404).json({ message: "Service no encontrado" });
 
-    const professionalFound = await ProfessionalModel.findById(professional);
-    if (!professionalFound) {
-      return res.status(404).json({ error: "Profesional no encontrado" });
-    }
-
-    const serviceFound = await ServiceModel.findById(service);
-    if (!serviceFound) {
-      return res.status(404).json({ error: "Servicio no encontrado" });
-    }
-
-    // 🔎 Validar que el profesional no tenga otra reserva en ese mismo horario exacto
-    const existingBooking = await BookingModel.findOne({
-      professional,
-      date: bookingDate,
+    const booking = await Booking.create({
+      client: clientId,
+      professional: prof._id,
+      service: serv._id,
+      scheduledAt: new Date(scheduledAt),
+      note,
+      address,
+      status: "pending",
     });
 
-    if (existingBooking) {
-      return res.status(409).json({ error: "El profesional ya tiene una reserva en ese horario" });
-    }
+    const populated = await Booking.findById(booking._id)
+      .populate("client", "name email")
+      .populate({ path: "professional", populate: { path: "user", select: "name email" } })
+      .populate("service", "name price");
 
-    const newBooking = new BookingModel({
-      user: userId,
-      professional,
-      service,
-      date: bookingDate,
-      notes,
-      location,
+    // 🔔 Notificación en vivo
+    const io = req.app.get("io");
+    io?.emit("booking:created", {
+      bookingId: populated._id.toString(),
+      professionalUserId: prof.user?._id?.toString(),
+      clientUserId: clientId,
+      at: new Date().toISOString(),
     });
 
-    await newBooking.save();
-
-    res.status(201).json({ message: "Reserva creada con éxito", booking: newBooking });
-  } catch (error) {
-    console.error("❌ Error al crear reserva:", error);
-    res.status(500).json({ error: "Error interno del servidor" });
+    return res.status(201).json(populated);
+  } catch (err) {
+    console.error("createBooking error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
-
-// 📌 Obtener reservas del usuario
+/**
+ * GET /api/bookings/mine
+ * Reservas del cliente autenticado
+ */
 export const getMyBookings = async (req, res) => {
   try {
+    const clientId = req.user.id;
+    const list = await Booking.find({ client: clientId })
+      .sort({ createdAt: -1 })
+      .populate({ path: "professional", populate: { path: "user", select: "name email" } })
+      .populate("service", "name price");
+    res.json(list);
+  } catch (err) {
+    console.error("getMyBookings error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * GET /api/bookings/for-me
+ * Reservas que le llegan al profesional autenticado
+ */
+export const getBookingsForMe = async (req, res) => {
+  try {
     const userId = req.user.id;
+    const prof = await Professional.findOne({ user: userId });
+    if (!prof) return res.status(404).json({ message: "Professional profile not found" });
 
-    const bookings = await BookingModel.find({ user: userId })
-      .populate("professional", "description phone")
-      .populate("service", "name price")
-      .sort({ date: -1 });
+    const list = await Booking.find({ professional: prof._id })
+      .sort({ createdAt: -1 })
+      .populate("client", "name email")
+      .populate("service", "name price");
 
-    res.status(200).json(bookings);
-  } catch (error) {
-    console.error("❌ Error al obtener reservas:", error);
-    res.status(500).json({ error: "Error interno del servidor" });
+    res.json(list);
+  } catch (err) {
+    console.error("getBookingsForMe error:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
-// 📌 Obtener todas las reservas como admin
-export const getAllBookings = async (req, res) => {
+/**
+ * PATCH /api/bookings/:id
+ * Actualiza el estado de la reserva:
+ * - Profesional: "accepted" | "rejected" | "completed"
+ * - Cliente: "canceled"
+ */
+export const updateBookingStatus = async (req, res) => {
   try {
-    // Validamos si es admin
-    if (!req.user.isAdmin) {
-      return res.status(403).json({ error: "Acceso denegado. Solo para admins" });
+    const { id } = req.params;
+    const { status } = req.body; // esperado
+    const user = req.user;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Id inválido" });
     }
 
-    const bookings = await BookingModel.find()
-      .populate("user", "name email")  // Datos del usuario que reservó
-      .populate("professional", "description phone")  // Profesional contratado
-      .populate("service", "name price") // Servicio contratado
-      .sort({ date: -1 });
+    const booking = await Booking.findById(id)
+      .populate({ path: "professional", populate: { path: "user", select: "name email" } })
+      .populate("client", "name email");
 
-    res.status(200).json(bookings);
-  } catch (error) {
-    console.error("❌ Error al obtener todas las reservas:", error);
-    res.status(500).json({ error: "Error interno del servidor" });
-  }
-};
+    if (!booking) return res.status(404).json({ message: "Booking no encontrada" });
 
-// 📌 Obtener reservas del profesional
-export const getMyProfessionalBookings = async (req, res) => {
-  try {
-    const professionalId = req.user.id;
+    // Reglas de negocio
+    const professionalUserId = booking.professional?.user?._id?.toString();
+    const clientUserId = booking.client?._id?.toString();
+    const me = user.id;
 
-    // Verificamos si existe un perfil asociado
-    const professional = await ProfessionalModel.findOne({ user: professionalId });
-    if (!professional) {
-      return res.status(404).json({ error: "Perfil profesional no encontrado" });
+    const PROFESSIONAL_ACTIONS = new Set(["accepted", "rejected", "completed"]);
+    const CLIENT_ACTIONS = new Set(["canceled"]);
+
+    if (PROFESSIONAL_ACTIONS.has(status)) {
+      // Tiene que ser el dueño profesional
+      if (me !== professionalUserId) return res.status(403).json({ message: "No autorizado" });
+    } else if (CLIENT_ACTIONS.has(status)) {
+      // Tiene que ser el cliente
+      if (me !== clientUserId) return res.status(403).json({ message: "No autorizado" });
+    } else {
+      return res.status(400).json({ message: "Estado no permitido" });
     }
 
-    const bookings = await BookingModel.find({ professional: professional._id })
-      .populate("user", "name email")
-      .populate("service", "name price")
-      .sort({ date: -1 });
+    booking.status = status;
+    await booking.save();
 
-    res.status(200).json(bookings);
-  } catch (error) {
-    console.error("❌ Error al obtener reservas del profesional:", error);
-    res.status(500).json({ error: "Error interno del servidor" });
+    // 🔔 Emitimos evento de actualización
+    const io = req.app.get("io");
+    io?.emit("booking:updated", {
+      bookingId: booking._id.toString(),
+      status,
+      professionalUserId,
+      clientUserId,
+      at: new Date().toISOString(),
+    });
+
+    res.json(booking);
+  } catch (err) {
+    console.error("updateBookingStatus error:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };

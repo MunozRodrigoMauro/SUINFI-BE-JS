@@ -16,6 +16,8 @@ router.post("/login", loginUser);
 // Ruta GET /api/auth/verify
 // Esta ruta escucha cuando alguien quiere verificar su sesión
 // Cuando se hace GET a /api/auth/verify, ejecuta la función verifyToken del controlador
-router.get("/verify", verifyToken)
+router.get("/verify", verifyToken, (req, res) => {
+    return res.status(200).json({ user: req.user })
+})
 
 export default router; // Exportamos para usar en index.js

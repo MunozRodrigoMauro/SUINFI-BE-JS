@@ -1,26 +1,18 @@
 // src/routes/booking.routes.js
-
 import express from "express";
+import { verifyToken } from "../middlewares/auth.middleware.js";
 import {
   createBooking,
   getMyBookings,
-  getAllBookings,
-  getMyProfessionalBookings
+  getBookingsForMe,
+  updateBookingStatus,
 } from "../controllers/booking.controller.js";
-import { verifyToken } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-// Crear nueva reserva
 router.post("/", verifyToken, createBooking);
-
-// Obtener mis reservas como usuario
-router.get("/my", verifyToken, getMyBookings);
-
-// Obtener reservas de mi perfil profesional
-router.get("/professional", verifyToken, getMyProfessionalBookings);
-
-// Obtener todas las reservas (solo admins)
-router.get("/", verifyToken, getAllBookings);
+router.get("/mine", verifyToken, getMyBookings);       // cliente
+router.get("/for-me", verifyToken, getBookingsForMe);  // profesional
+router.patch("/:id", verifyToken, updateBookingStatus);
 
 export default router;

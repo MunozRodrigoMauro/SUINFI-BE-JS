@@ -11,6 +11,10 @@ export const createProfessionalProfile = async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
+    if (!location || !Array.isArray(location.coordinates) || location.coordinates.length !== 2) {
+      return res.status(400).json({ message: "Location (lng, lat) es obligatorio" });
+    }
+
     if (userRole !== "professional") {
       return res.status(403).json({ message: "Only professionals can create profiles" });
     }
@@ -26,7 +30,6 @@ export const createProfessionalProfile = async (req, res) => {
       showPhone
     } = req.body;
 
-    // Prevenir que ya exista un perfil
     const existing = await ProfessionalModel.findOne({ user: userId });
     if (existing) {
       return res.status(400).json({ message: "Professional profile already exists" });
@@ -53,51 +56,58 @@ export const createProfessionalProfile = async (req, res) => {
   }
 };
 
-/**
- * 🟢 Obtener perfil profesional
- * GET /api/professionals
- */
-// GET /api/professionals
+// controllers/professional.controller.js
 export const getProfessionals = async (req, res) => {
-    try {
-      const { serviceId, categoryId } = req.query;
-      const query = {};
-  
-      // ✅ Validamos si es un ObjectId válido (sino lo ignoramos)
-      if (serviceId && mongoose.Types.ObjectId.isValid(serviceId)) {
-        query.services = serviceId;
+  try {
+    const { serviceId, categoryId, availableNow, page = 1, limit = 12 } = req.query;
+
+    const query = {};
+
+    // filtro por servicio puntual
+    if (serviceId && mongoose.Types.ObjectId.isValid(serviceId)) {
+      query.services = serviceId;
+    }
+
+    // filtro por categoría -> traducimos a lista de services
+    if (categoryId && mongoose.Types.ObjectId.isValid(categoryId)) {
+      const servicesInCategory = await ServiceModel.find({ category: categoryId }, "_id");
+      const serviceIds = servicesInCategory.map((s) => s._id);
+      if (serviceIds.length > 0) {
+        query.services = { $in: serviceIds };
+      } else {
+        return res.json({ items: [], total: 0, page: 1, pages: 1 });
       }
-  
-      if (categoryId && mongoose.Types.ObjectId.isValid(categoryId)) {
-        const servicesInCategory = await ServiceModel.find({ category: categoryId }, "_id");
-        const serviceIds = servicesInCategory.map(service => service._id);
-  
-        // Solo aplicamos si hay servicios asociados
-        if (serviceIds.length > 0) {
-          query.services = { $in: serviceIds };
-        } else {
-          // ⚠️ No hay servicios en esa categoría, devolvemos vacío
-          return res.json([]);
-        }
-      }
-  
-      const professionals = await ProfessionalModel.find(query)
-        .populate("user", "name email phone") // Mostrar datos del usuario
+    }
+
+    // filtro por disponibilidad inmediata
+    if (String(availableNow) === "true") {
+      query.isAvailableNow = true;
+    }
+
+    const pageNum = Math.max(parseInt(page) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit) || 12, 1), 50);
+
+    const [items, total] = await Promise.all([
+      ProfessionalModel.find(query)
+        .populate("user", "name email phone")
         .populate({
           path: "services",
           select: "name price category",
-          populate: {
-            path: "category",
-            select: "name"
-          }
-        });
-  
-      res.json(professionals);
-    } catch (error) {
-      console.error("❌ Error al obtener profesionales:", error);
-      res.status(500).json({ message: "Error interno del servidor" });
-    }
-  };
+          populate: { path: "category", select: "name" },
+        })
+        .sort({ isAvailableNow: -1, updatedAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum),
+      ProfessionalModel.countDocuments(query),
+    ]);
+
+    const pages = Math.max(Math.ceil(total / limitNum), 1);
+    return res.json({ items, total, page: pageNum, pages });
+  } catch (error) {
+    console.error("❌ Error al obtener profesionales:", error);
+    res.status(500).json({ message: "Error interno del servidor" });
+  }
+};
 
 // 📌 Obtener un profesional por su ID
 export const getProfessionalById = async (req, res) => {
@@ -105,8 +115,8 @@ export const getProfessionalById = async (req, res) => {
     const { id } = req.params;
 
     const professional = await ProfessionalModel.findById(id)
-      .populate("services", "name price") // Mostramos info de los servicios
-      .populate("user", "name email");    // Info del usuario asociado
+      .populate("services", "name price")
+      .populate("user", "name email");
 
     if (!professional) {
       return res.status(404).json({ error: "Professional not found" });
@@ -126,7 +136,6 @@ export const getProfessionalById = async (req, res) => {
 export const getNearbyProfessionals = async (req, res) => {
   try {
     const { lat, lng, maxDistance = 5000 } = req.query;
-
     if (!lat || !lng) {
       return res.status(400).json({ error: "Latitude and longitude are required" });
     }
@@ -134,22 +143,16 @@ export const getNearbyProfessionals = async (req, res) => {
     const professionals = await ProfessionalModel.find({
       location: {
         $near: {
-          $geometry: {
-            type: "Point",
-            coordinates: [parseFloat(lng), parseFloat(lat)]
-          },
-          $maxDistance: parseInt(maxDistance) // en metros
-        }
-      }
+          $geometry: { type: "Point", coordinates: [parseFloat(lng), parseFloat(lat)] },
+          $maxDistance: parseInt(maxDistance),
+        },
+      },
     })
       .populate("user", "name email")
       .populate({
         path: "services",
         select: "name price category",
-        populate: {
-          path: "category",
-          select: "name"
-        }
+        populate: { path: "category", select: "name" },
       });
 
     res.status(200).json(professionals);
@@ -166,23 +169,26 @@ export const getNearbyProfessionals = async (req, res) => {
 export const updateAvailabilityNow = async (req, res) => {
   try {
     const professionalId = req.user.id;
-
-    // Buscamos el perfil profesional del usuario autenticado
     const professional = await ProfessionalModel.findOne({ user: professionalId });
+
     if (!professional) {
       return res.status(404).json({ message: "Professional profile not found" });
     }
 
     const { isAvailableNow } = req.body;
-
     if (typeof isAvailableNow !== "boolean") {
       return res.status(400).json({ message: "Field 'isAvailableNow' must be a boolean" });
     }
 
-    await ProfessionalModel.updateOne(
-      { user: professionalId },
-      { isAvailableNow }
-    );
+    await ProfessionalModel.updateOne({ user: professionalId }, { isAvailableNow });
+
+    // 🔊 Emitimos evento en tiempo real
+    const io = req.app.get("io");
+    io?.emit("availability:update", {
+      userId: professional.user.toString(),
+      isAvailableNow,
+      at: new Date().toISOString(),
+    });
 
     res.status(200).json({ message: "Availability updated", isAvailableNow });
   } catch (error) {
@@ -199,10 +205,7 @@ export const getAvailableNowProfessionals = async (req, res) => {
       .populate({
         path: "services",
         select: "name price category",
-        populate: {
-          path: "category",
-          select: "name"
-        }
+        populate: { path: "category", select: "name" },
       });
 
     res.status(200).json(professionals);
@@ -239,5 +242,58 @@ export const updateAvailabilitySchedule = async (req, res) => {
   } catch (error) {
     console.error("❌ Error updating availabilitySchedule:", error);
     res.status(500).json({ error: "Server error" });
+  }
+};
+
+// src/controllers/professional.controller.js
+export const getMyProfessional = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const doc = await ProfessionalModel
+      .findOne({ user: userId })
+      .populate("user", "name email");
+    if (!doc) return res.status(404).json({ message: "Professional profile not found" });
+    res.json(doc);
+  } catch (e) {
+    console.error("getMyProfessional error", e);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const updateMyProfessional = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const allowed = [
+      "bio", "phone", "showPhone", "services",
+      "address.country", "address.state", "address.city",
+      "address.street", "address.number", "address.unit", "address.postalCode",
+      // si querés permitir también: "location"
+    ];
+
+    // sanitizar payload: solo campos permitidos
+    const payload = {};
+    for (const k of allowed) {
+      const [root, sub] = k.split(".");
+      if (sub) {
+        if (!payload[root]) payload[root] = {};
+        if (req.body?.[root]?.[sub] != null) payload[root][sub] = req.body[root][sub];
+      } else if (req.body?.[root] != null) {
+        payload[root] = req.body[root];
+      }
+    }
+
+    const updated = await ProfessionalModel.findOneAndUpdate(
+      { user: userId },
+      { $set: payload },
+      { new: true }
+    )
+      .populate("user", "name email");
+
+    if (!updated) return res.status(404).json({ message: "Professional profile not found" });
+
+    res.json({ message: "Professional updated", professional: updated });
+  } catch (e) {
+    console.error("updateMyProfessional error", e);
+    res.status(500).json({ message: "Server error" });
   }
 };

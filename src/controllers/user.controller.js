@@ -3,6 +3,8 @@
 import UserModel from "../models/User.js";
 import bcrypt from "bcrypt"; // Librería para encriptar contraseñas
 import jwt from "jsonwebtoken";
+import ProfessionalModel from "../models/Professional.js";
+
 
 // 🟩 BUENA PRÁCTICA: Cada función del controlador maneja una ruta específica.
 
@@ -101,5 +103,57 @@ export const getMe = async (req, res) => {
   } catch (error) {
     console.error("❌ Error al obtener perfil:", error);
     return res.status(500).json({ message: "Server error", error });
+  }
+};
+
+// ✅ Actualizar perfil del usuario autenticado (robusto con save())
+export const updateMe = async (req, res) => {
+  try {
+    const userId = req.user?._id || req.user?.id;   // por si viene como _id
+    const { name, password } = req.body;
+
+    // Log rápido para ver qué llega (podés quitarlo después)
+    // console.log({ userId, body: req.body });
+
+    const user = await UserModel.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (name && name !== user.name) user.name = name;
+
+    if (password) {
+      if (password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+      const bcrypt = (await import("bcrypt")).default;
+      user.password = await bcrypt.hash(password, 10);
+    }
+
+    await user.save(); // <-- dispara timestamps y validaciones del schema
+
+    // devolvemos sin la password
+    const { password: _, ...userSafe } = user.toObject();
+    return res.status(200).json({ user: userSafe });
+  } catch (error) {
+    console.error("❌ Error updating profile:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// 👉 Obtener MI perfil profesional
+export const getMyProfile = async (req, res) => {
+  try {
+    const u = req.user; // o cargalo como lo haces ahora
+    const prof = await ProfessionalModel.findOne({ user: u.id }, "location").lean();
+
+    const hasName = (u.name || "").trim().length >= 2;
+    const hasAvatar = (u.avatarUrl || "").trim().length > 0; // si no usás avatar, dejalo en false
+    const hasLocation = !!(prof?.location?.coordinates?.length === 2);
+
+    const requiresOnboarding = !(hasName && hasLocation); // avatar opcional por ahora
+
+    res.json({ user: u, requiresOnboarding });
+  } catch (e) {
+    console.error("❌ getMyProfile:", e);
+    res.status(500).json({ error: "Server error" });
   }
 };

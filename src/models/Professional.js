@@ -18,6 +18,16 @@ const professionalSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: 500
+  }, // ⬇️ NUEVO: dirección “humana”
+  address: {
+    country: { type: String, default: "" },     // País
+    state:   { type: String, default: "" },     // Provincia/Estado
+    city:    { type: String, default: "" },     // Ciudad / Localidad
+    street:  { type: String, default: "" },     // Calle
+    number:  { type: String, default: "" },     // Número
+    unit:    { type: String, default: "" },     // Depto/Oficina/Casa
+    postalCode: { type: String, default: "" },  // Código postal
+  // (dejá tu location GeoJSON como está, no lo tocamos)
   },
   location: {
     type: {
@@ -64,7 +74,14 @@ const professionalSchema = new mongoose.Schema({
   },
   averageRating: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0,
+    max: 5
+  },
+  avatarUrl: { type: String, default: "" },
+  documents: {
+    criminalRecordUrl: { type: String, default: "" }, // antecedentes (opcional)
+    credentialUrl:    { type: String, default: "" }, // título / matrícula (opcional)
   },
 }, {
   timestamps: true
@@ -73,3 +90,5 @@ const professionalSchema = new mongoose.Schema({
 const ProfessionalModel = mongoose.model("Professional", professionalSchema);
 professionalSchema.index({ location: '2dsphere' }); // 🟩 Indice para búsqueda geoespaciales
 export default ProfessionalModel;
+
+

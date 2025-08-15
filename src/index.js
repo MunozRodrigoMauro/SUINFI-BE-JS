@@ -1,85 +1,136 @@
+// src/index.js
 // Importamos las dependencias principales
-import cors from "cors"; // Importamos cors
-import express from "express";           // Framework para crear el servidor HTTP
-import mongoose from "mongoose";         // ODM para conectarse y trabajar con MongoDB
-import dotenv from "dotenv";             // Permite usar variables de entorno desde .env
-import userRoutes from "./routes/user.routes.js"; // Importamos las rutas de usuarios
-import authRoutes from "./routes/auth.routes.js"; // Importamos las rutas de autenticación
-import serviceRoutes from "./routes/service.routes.js"; // Importamos las rutas de servicios
-import categoryRoutes from "./routes/category.routes.js"; // Importamos las rutas de categorías
-import professionalRoutes from "./routes/professional.routes.js"; // Importamos las rutas de perfiles profesionales
-import bookingRoutes from "./routes/booking.routes.js"; // Importamos las rutas de reservas
-import reviewRoutes from "./routes/review.routes.js"; // Importamos las rutas de reviews
-import favoritesRoutes from "./routes/favorite.routes.js"; // Importamos las rutas de favoritos
-import chatRoutes from "./routes/chat.routes.js"; // Importamos las rutas de chats
-import notificationRoutes from "./routes/notification.routes.js"; // Importamos las rutas de notificaciones
-import paymentRoutes from "./routes/payments.routes.js"; // Importamos las rutas de pagos
+import cors from "cors";
+import express from "express";
+import mongoose from "mongoose";
+import dotenv from "dotenv";
 
-dotenv.config(); // Carga las variables de entorno del archivo .env
+// Rutas
+import userRoutes from "./routes/user.routes.js";
+import authRoutes from "./routes/auth.routes.js";
+import serviceRoutes from "./routes/service.routes.js";
+import categoryRoutes from "./routes/category.routes.js";
+import professionalRoutes from "./routes/professional.routes.js";
+import bookingRoutes from "./routes/booking.routes.js";
+import reviewRoutes from "./routes/review.routes.js";
+import favoritesRoutes from "./routes/favorite.routes.js";
+import chatRoutes from "./routes/chat.routes.js";
+import notificationRoutes from "./routes/notification.routes.js";
+import paymentRoutes from "./routes/payments.routes.js";
+import clientRoutes from "./routes/client.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
 
-const app = express(); // Creamos la aplicación de Express
+// Cron + util de agenda
+import cron from "node-cron";
+import isNowWithinSchedule from "./utils/schedule.js";
 
-app.use(express.json()); // Permite que el servidor entienda JSON en las peticiones
+// Modelos
+import ProfessionalModel from "./models/Professional.js";
 
-// ... debajo de app.use(express.json());
-app.use(cors({
-  origin: "http://localhost:5173", // habilitá el frontend
-  credentials: true, // si vas a usar cookies (por ahora opcional)
-}));
+// 🔌 HTTP + Socket.IO
+import { createServer } from "http";
+import { Server as SocketIOServer } from "socket.io";
 
-// 📌 Middleware para usar el router de usuarios
-// Todas las rutas dentro de user.routes.js estarán bajo /api/users
+dotenv.config();
+
+const app = express();
+app.use(express.json());
+
+// CORS para el front local
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+// 🚀 HTTP server + Socket.IO
+const httpServer = createServer(app);
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: "http://localhost:5173",
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+  },
+  transports: ["websocket", "polling"],
+  pingTimeout: 20000,
+  pingInterval: 25000,
+});
+
+// Hacemos IO accesible desde controladores: req.app.get('io')
+app.set("io", io);
+
+// Eventos de conexión
+io.on("connection", (socket) => {
+  console.log("🔌 socket conectado:", socket.id);
+  socket.on("disconnect", () => {});
+});
+
+// Rutas
 app.use("/api/users", userRoutes);
-
-// 📌 Middleware para usar el router de autenticación
-// Todas las rutas dentro de auth.routes.js estarán bajo /api/auth
 app.use("/api/auth", authRoutes);
+app.use("/api/services", serviceRoutes);
+app.use("/api/categories", categoryRoutes);
+app.use("/api/professionals", professionalRoutes);
+app.use("/api/bookings", bookingRoutes);
+app.use("/api/chats", chatRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/payments", paymentRoutes);
+app.use("/api/clients", clientRoutes);
+app.use("/api/admins", adminRoutes);
 
-// Ruta base para probar si el servidor funciona
-app.get("/", (req, res) => {
+// Ruta base
+app.get("/", (_req, res) => {
   res.send("Bienvenido a la API de SUINFI 🎯");
 });
 
-// 👇 Agregamos este middleware después de los otros
-app.use("/api/services", serviceRoutes); // Todas las rutas de servicios comienzan con /api/services
+const PORT = process.env.PORT || 3000;
+const MONGO_URI = process.env.MONGO_URI;
 
-// 📌 Rutas para categorías (ej: /api/categories)
-app.use("/api/categories", categoryRoutes);
-
-// 📌 Rutas para perfiles profesionales
-app.use("/api/professionals", professionalRoutes);
-
-// 📌 Rutas para reservas
-app.use("/api/bookings", bookingRoutes);
-
-// 📌 Rutas para chats
-app.use("/api/chats", chatRoutes);
-
-// 📌 Rutas para notificaciones
-app.use("/api/notifications", notificationRoutes);
-
-// 📌 Rutas para pagos
-app.use("/api/payments", paymentRoutes);
-
-// 🟩 Buena práctica: las variables del entorno no deben hardcodearse
-const PORT = process.env.PORT || 3000;           // Puerto configurable
-const MONGO_URI = process.env.MONGO_URI;         // URI de conexión a MongoDB
-
-// 📌 Rutas para reviews
-app.use("/api/reviews", reviewRoutes);
-
-// 📌 Rutas para favoritos
-app.use("/api/favorites", favoritesRoutes);
-
-// Conectamos a la base de datos y levantamos el servidor
-mongoose.connect(MONGO_URI)
+// Conexión y arranque
+mongoose
+  .connect(MONGO_URI)
   .then(() => {
-    // 🟩 Buena práctica: solo levantamos el servidor si la DB está conectada
-    app.listen(PORT, () => {
+    httpServer.listen(PORT, () => {
       console.log(`✅ Servidor corriendo en http://localhost:${PORT}`);
     });
   })
-  .catch(err => {
-    // 🟩 Buena práctica: manejo de errores al conectar a la base de datos
+  .catch((err) => {
     console.error("❌ Error al conectar a Mongo:", err);
   });
+
+/**
+ * ⏱️ Cron: sincroniza isAvailableNow con availabilitySchedule cada minuto
+ * - Usa updateOne + $set para evitar validaciones de otros campos
+ * - Emite "availability:update" por Socket.IO cuando cambie el valor (mismo nombre que el front)
+ */
+cron.schedule("* * * * *", async () => {
+  try {
+    const pros = await ProfessionalModel.find(
+      {},
+      { _id: 1, user: 1, isAvailableNow: 1, availabilitySchedule: 1 }
+    );
+
+    for (const p of pros) {
+      const shouldBeOn = isNowWithinSchedule(p.availabilitySchedule);
+
+      if (p.isAvailableNow !== shouldBeOn) {
+        await ProfessionalModel.updateOne(
+          { _id: p._id },
+          { $set: { isAvailableNow: shouldBeOn } },
+          { timestamps: false }
+        );
+
+        io.emit("availability:update", {
+          userId: p.user.toString(),
+          isAvailableNow: shouldBeOn,
+          at: new Date().toISOString(),
+        });
+      }
+    }
+  } catch (e) {
+    console.error("Cron availability error:", e);
+  }
+});

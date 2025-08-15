@@ -2,7 +2,7 @@
 import express from "express";
 
 // Importamos las funciones que manejan la lógica de cada ruta
-import { createUser, getUsers, getMe } from "../controllers/user.controller.js";
+import { createUser, getUsers, getMe, updateMe } from "../controllers/user.controller.js";
 
 // Importamos las validaciones y el middleware de resultado
 import { userValidationRules } from "../middlewares/user.validator.js";
@@ -27,6 +27,9 @@ router.get("/", verifyToken, isAdmin, getUsers); // 🛡️ Solo con token váli
 
 // 🧍 Ruta protegida: obtener solo tu perfil (GET /api/users/me)
 router.get("/me", verifyToken, getMe); // ✅ Aquí va la nueva ruta
+
+// 📌 Ruta protegida: actualizar tu perfil (PUT /api/users/me)
+router.put("/me", verifyToken, updateMe); // ✅ Aquí va la nueva ruta
 
 // Exportamos el router para que pueda ser usado en index.js
 export default router;
