@@ -106,32 +106,43 @@ export const getMe = async (req, res) => {
   }
 };
 
-// ✅ Actualizar perfil del usuario autenticado (robusto con save())
+// src/controllers/user.controller.js
 export const updateMe = async (req, res) => {
   try {
-    const userId = req.user?._id || req.user?.id;   // por si viene como _id
-    const { name, password } = req.body;
-
-    // Log rápido para ver qué llega (podés quitarlo después)
-    // console.log({ userId, body: req.body });
+    const userId = req.user?._id || req.user?.id;
+    const { name, password, address } = req.body;   // 👈 leer address
 
     const user = await UserModel.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    if (name && name !== user.name) user.name = name;
+    if (name && name.trim() && name !== user.name) {
+      user.name = name.trim();
+    }
 
     if (password) {
-      if (password.length < 6) {
+      if (String(password).length < 6) {
         return res.status(400).json({ message: "Password must be at least 6 characters" });
       }
       const bcrypt = (await import("bcrypt")).default;
-      user.password = await bcrypt.hash(password, 10);
+      user.password = await bcrypt.hash(String(password), 10);
     }
 
-    await user.save(); // <-- dispara timestamps y validaciones del schema
+    // 👇 merge seguro de address si viene en el payload
+    if (address && typeof address === "object") {
+      user.address = {
+        country: address.country?.trim() || user.address?.country || "",
+        state: address.state?.trim() || user.address?.state || "",
+        city: address.city?.trim() || user.address?.city || "",
+        street: address.street?.trim() || user.address?.street || "",
+        number: address.number?.trim() || user.address?.number || "",
+        unit: address.unit?.trim() || user.address?.unit || "",
+        postalCode: address.postalCode?.trim() || user.address?.postalCode || "",
+      };
+    }
 
-    // devolvemos sin la password
-    const { password: _, ...userSafe } = user.toObject();
+    await user.save();
+
+    const { password: _pw, ...userSafe } = user.toObject();
     return res.status(200).json({ user: userSafe });
   } catch (error) {
     console.error("❌ Error updating profile:", error);

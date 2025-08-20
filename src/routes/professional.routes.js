@@ -1,5 +1,5 @@
 import express from "express";
-import { createProfessionalProfile, getProfessionals, getProfessionalById, getNearbyProfessionals, updateAvailabilityNow, getAvailableNowProfessionals, updateAvailabilitySchedule, getMyProfessional, updateMyProfessional  } from "../controllers/professional.controller.js";
+import { createProfessionalProfile, getProfessionals, getProfessionalById, getNearbyProfessionals, updateAvailabilityNow, getAvailableNowProfessionals, updateAvailabilitySchedule, getMyProfessional, updateMyProfessional, setAvailabilityMode } from "../controllers/professional.controller.js";
 import { verifyToken } from "../middlewares/auth.middleware.js";
 import { patchMyProfessionalRules } from "../middlewares/professional.validator.js";
 import { validateResult } from "../middlewares/validateResult.js";
@@ -26,6 +26,9 @@ router.put("/me", verifyToken, updateMyProfessional);
 
 // 👉 Actualizar MI perfil profesional (bio, phone, showPhone, services)
 router.patch("/me", verifyToken, patchMyProfessionalRules, validateResult, updateMyProfessional);
+
+// 📌 Actualizar estrategia de disponibilidad
+router.patch("/availability-mode", verifyToken, setAvailabilityMode);
 
 // 📌 Obtener horario de disponibilidad
 router.put("/availability-schedule", verifyToken, updateAvailabilitySchedule);

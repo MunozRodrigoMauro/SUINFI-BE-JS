@@ -31,6 +31,9 @@ import ProfessionalModel from "./models/Professional.js";
 import { createServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 
+// 🆕 JWT para validar (opcional) joinUser
+import jwt from "jsonwebtoken";
+
 dotenv.config();
 
 const app = express();
@@ -62,10 +65,119 @@ const io = new SocketIOServer(httpServer, {
 // Hacemos IO accesible desde controladores: req.app.get('io')
 app.set("io", io);
 
-// Eventos de conexión
+// 🆕 Presencia en memoria (simple)
+const onlineUsers = new Set();
+
+// Helper: verificar JWT de forma segura (opcional)
+function verifyTokenSafe(token) {
+  try {
+    const secret = process.env.JWT_SECRET || process.env.JWT_KEY || "changeme";
+    return jwt.verify(token, secret);
+  } catch {
+    return null;
+  }
+}
+
+/* ------------------------------------------------------------------
+   🔊 Socket.IO: rooms por usuario + presencia
+   - joinUser(payload): payload puede ser string userId o { userId, token }
+   - joinRoom / leaveRoom: helpers opcionales por si querés rooms de chat/booking
+   - presence:online/offline para que el FE muestre conectado/desconectado
+   - whoIsOnline: devuelve arreglo con userIds online (dev)
+-------------------------------------------------------------------*/
 io.on("connection", (socket) => {
   console.log("🔌 socket conectado:", socket.id);
-  socket.on("disconnect", () => {});
+
+  // El front puede emitir:
+  // socket.emit("joinUser", userId)  // simple
+  // o: socket.emit("joinUser", { userId, token }) // validando token opcionalmente
+  socket.on("joinUser", (payload) => {
+    try {
+      let userId =
+        typeof payload === "string" ? payload : payload?.userId || null;
+      const token =
+        payload && typeof payload === "object" ? payload.token : null;
+
+      if (token) {
+        const decoded = verifyTokenSafe(token);
+        if (!decoded) {
+          console.warn("joinUser: token inválido");
+          return;
+        }
+        // si no mandaron userId, usamos el del token
+        if (!userId) userId = decoded.id || decoded._id;
+        // si mandaron ambos y no coinciden, ignoramos
+        if ((decoded.id || decoded._id) && userId && (decoded.id || decoded._id) !== userId) {
+          console.warn("joinUser: userId no coincide con token");
+          return;
+        }
+      }
+
+      if (!userId || typeof userId !== "string") return;
+
+      socket.join(userId);
+      socket.data.userId = userId;
+
+      // Marcar presencia (si es el primer socket de ese user)
+      const room = io.sockets.adapter.rooms.get(userId);
+      if (room && room.size === 1) {
+        onlineUsers.add(userId);
+        io.emit("presence:online", { userId, at: new Date().toISOString() });
+      }
+
+      // Ping al propio usuario
+      io.to(userId).emit("presence", {
+        userId,
+        online: true,
+        socketId: socket.id,
+        at: new Date().toISOString(),
+      });
+
+      console.log(`✅ Socket ${socket.id} unido a room de usuario ${userId}`);
+    } catch (e) {
+      console.error("joinUser error:", e);
+    }
+  });
+
+  // (Opcional) Rooms genéricas (por chatId, bookingId, etc.)
+  socket.on("joinRoom", (room) => {
+    if (!room) return;
+    socket.join(room);
+    console.log(`➡️  ${socket.id} join -> ${room}`);
+  });
+
+  socket.on("leaveRoom", (room) => {
+    if (!room) return;
+    socket.leave(room);
+    console.log(`⬅️  ${socket.id} leave -> ${room}`);
+  });
+
+  // (Opcional) Debug: listar rooms del socket
+  socket.on("debugRooms", () => {
+    console.log("Rooms del socket", socket.id, "->", socket.rooms);
+  });
+
+  // (Opcional) Obtener lista de userIds online (solo para dev)
+  socket.on("whoIsOnline", (cb) => {
+    if (typeof cb === "function") cb(Array.from(onlineUsers));
+  });
+
+  socket.on("disconnect", (reason) => {
+    const userId = socket.data?.userId;
+    if (userId) {
+      // si es el último socket en la room, marcar offline
+      const room = io.sockets.adapter.rooms.get(userId);
+      const remaining = room ? room.size - 1 : 0; // el actual ya se fue
+      if (remaining <= 0) {
+        onlineUsers.delete(userId);
+        io.emit("presence:offline", {
+          userId,
+          at: new Date().toISOString(),
+        });
+      }
+    }
+    console.log("🔌 socket desconectado:", socket.id, "motivo:", reason);
+  });
 });
 
 // Rutas
@@ -109,7 +221,7 @@ mongoose
 cron.schedule("* * * * *", async () => {
   try {
     const pros = await ProfessionalModel.find(
-      {},
+      { availabilityStrategy: "schedule" }, // 👈 solo a los que eligen agenda
       { _id: 1, user: 1, isAvailableNow: 1, availabilitySchedule: 1 }
     );
 

@@ -20,12 +20,15 @@ export const createService = async (req, res) => {
   }
 };
 
-// 📌 Obtener todos los servicios
+// controllers/service.controller.js
 export const getServices = async (req, res) => {
   try {
-    const services = await ServiceModel.find().populate("category");
-    return res.status(200).json(services);
-  } catch (error) {
-    return res.status(500).json({ message: "Server error", error });
+    const { categoryId } = req.query;
+    const filter = categoryId ? { category: categoryId } : {};
+    const items = await ServiceModel.find(filter).select("name description price category");
+    res.json(items);
+  } catch (e) {
+    res.status(500).json({ message: "Server error" });
   }
 };
+

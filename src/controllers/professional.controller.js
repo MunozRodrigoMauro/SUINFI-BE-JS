@@ -115,8 +115,12 @@ export const getProfessionalById = async (req, res) => {
     const { id } = req.params;
 
     const professional = await ProfessionalModel.findById(id)
-      .populate("services", "name price")
-      .populate("user", "name email");
+      .populate("user", "name email")
+      .populate({
+        path: "services",
+        select: "name description price category",
+        populate: { path: "category", select: "name" },
+      });
 
     if (!professional) {
       return res.status(404).json({ error: "Professional not found" });
@@ -128,6 +132,7 @@ export const getProfessionalById = async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 };
+
 
 /**
  * 📍 Obtener profesionales cercanos
@@ -162,40 +167,38 @@ export const getNearbyProfessionals = async (req, res) => {
   }
 };
 
-/**
- * 🟢 Actualizar estado de disponibilidad inmediata
- * PATCH /api/professionals/availability
- */
+// PATCH /api/professionals/availability
 export const updateAvailabilityNow = async (req, res) => {
   try {
-    const professionalId = req.user.id;
-    const professional = await ProfessionalModel.findOne({ user: professionalId });
-
-    if (!professional) {
-      return res.status(404).json({ message: "Professional profile not found" });
-    }
-
+    const userId = req.user.id;
     const { isAvailableNow } = req.body;
+
     if (typeof isAvailableNow !== "boolean") {
       return res.status(400).json({ message: "Field 'isAvailableNow' must be a boolean" });
     }
 
-    await ProfessionalModel.updateOne({ user: professionalId }, { isAvailableNow });
+    const updated = await ProfessionalModel.findOneAndUpdate(
+      { user: userId },
+      { $set: { isAvailableNow, availabilityStrategy: "manual" } },
+      { new: true }
+    );
 
-    // 🔊 Emitimos evento en tiempo real
+    if (!updated) return res.status(404).json({ message: "Professional profile not found" });
+
     const io = req.app.get("io");
     io?.emit("availability:update", {
-      userId: professional.user.toString(),
-      isAvailableNow,
+      userId: updated.user.toString(),
+      isAvailableNow: updated.isAvailableNow,
       at: new Date().toISOString(),
     });
 
-    res.status(200).json({ message: "Availability updated", isAvailableNow });
+    res.status(200).json({ message: "Availability updated", isAvailableNow: updated.isAvailableNow, availabilityStrategy: updated.availabilityStrategy });
   } catch (error) {
     console.error("❌ Error updating availability:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
+
 
 // 📌 Obtener profesionales disponibles ahora
 export const getAvailableNowProfessionals = async (req, res) => {
@@ -294,6 +297,26 @@ export const updateMyProfessional = async (req, res) => {
     res.json({ message: "Professional updated", professional: updated });
   } catch (e) {
     console.error("updateMyProfessional error", e);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// PATCH /api/professionals/availability-mode
+export const setAvailabilityMode = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { mode } = req.body; // "manual" | "schedule"
+    if (!["manual","schedule"].includes(mode)) {
+      return res.status(400).json({ message: "Invalid mode" });
+    }
+    const updated = await ProfessionalModel.findOneAndUpdate(
+      { user: userId },
+      { $set: { availabilityStrategy: mode } },
+      { new: true }
+    );
+    if (!updated) return res.status(404).json({ message: "Professional profile not found" });
+    return res.json({ message: "Mode updated", availabilityStrategy: updated.availabilityStrategy });
+  } catch (e) {
     res.status(500).json({ message: "Server error" });
   }
 };

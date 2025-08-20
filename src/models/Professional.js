@@ -78,6 +78,11 @@ const professionalSchema = new mongoose.Schema({
     min: 0,
     max: 5
   },
+  availabilityStrategy: {
+    type: String,
+    enum: ["manual", "schedule"],
+    default: "manual"
+  },  
   avatarUrl: { type: String, default: "" },
   documents: {
     criminalRecordUrl: { type: String, default: "" }, // antecedentes (opcional)
