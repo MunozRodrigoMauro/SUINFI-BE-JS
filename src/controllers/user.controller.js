@@ -110,40 +110,57 @@ export const getMe = async (req, res) => {
 export const updateMe = async (req, res) => {
   try {
     const userId = req.user?._id || req.user?.id;
-    const { name, password, address } = req.body;   // 👈 leer address
+    
+    // Define los campos permitidos con sanitización
+    const allowed = [
+      "name", "password",
+      "address.country", "address.state", "address.city", "address.street", "address.number",
+      "address.unit", "address.postalCode",
+      "address.label",                  // 👈 nuevo
+      "address.location.lat", "address.location.lng", // 👈 nuevo
+    ];
 
-    const user = await UserModel.findById(userId);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    if (name && name.trim() && name !== user.name) {
-      user.name = name.trim();
+    // Construir el payload de forma segura
+    const payload = {};
+    for (const path of allowed) {
+      const [root, k1, k2] = path.split(".");
+      if (k2) {
+        if (!payload[root]) payload[root] = {};
+        if (!payload[root][k1]) payload[root][k1] = {};
+        if (req.body?.[root]?.[k1]?.[k2] != null) {
+          payload[root][k1][k2] = req.body[root][k1][k2];
+        }
+      } else if (k1) {
+        if (!payload[root]) payload[root] = {};
+        if (req.body?.[root]?.[k1] != null) payload[root][k1] = req.body[root][k1];
+      } else if (req.body?.[root] != null) {
+        payload[root] = req.body[root];
+      }
     }
 
-    if (password) {
-      if (String(password).length < 6) {
+    // Manejo especial para password (hashing)
+    if (payload.password) {
+      if (String(payload.password).length < 6) {
         return res.status(400).json({ message: "Password must be at least 6 characters" });
       }
       const bcrypt = (await import("bcrypt")).default;
-      user.password = await bcrypt.hash(String(password), 10);
+      payload.password = await bcrypt.hash(String(payload.password), 10);
     }
 
-    // 👇 merge seguro de address si viene en el payload
-    if (address && typeof address === "object") {
-      user.address = {
-        country: address.country?.trim() || user.address?.country || "",
-        state: address.state?.trim() || user.address?.state || "",
-        city: address.city?.trim() || user.address?.city || "",
-        street: address.street?.trim() || user.address?.street || "",
-        number: address.number?.trim() || user.address?.number || "",
-        unit: address.unit?.trim() || user.address?.unit || "",
-        postalCode: address.postalCode?.trim() || user.address?.postalCode || "",
-      };
+    // Actualizar el usuario
+    const updatedUser = await UserModel.findByIdAndUpdate(
+      userId, 
+      { $set: payload }, 
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found" });
     }
 
-    await user.save();
-
-    const { password: _pw, ...userSafe } = user.toObject();
+    const { password: _pw, ...userSafe } = updatedUser.toObject();
     return res.status(200).json({ user: userSafe });
+
   } catch (error) {
     console.error("❌ Error updating profile:", error);
     return res.status(500).json({ message: "Server error" });
