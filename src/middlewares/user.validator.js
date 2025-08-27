@@ -29,6 +29,6 @@ export const userValidationRules = [
   // 🟩 Buena práctica: validamos que el role sea uno válido
   body("role")
     .optional()
-    .isIn(["user", "professional", "admin"])
+    .isIn(["user", "professional", "admin", "client"])
     .withMessage("Invalid role")
 ];

@@ -1,5 +1,8 @@
 // src/models/User.js
 import mongoose from "mongoose";
+import ProfessionalModel from "./Professional.js";
+import ClientModel from "./Client.js";
+import AdminModel from "./Admin.js";
 
 const addressSchema = new mongoose.Schema({
   country: { type: String, trim: true, default: "" },
@@ -34,5 +37,21 @@ const userSchema = new mongoose.Schema({
 
 // 👉 índice para búsquedas por token
 userSchema.index({ "emailVerification.token": 1 });
+
+// 👉 borra perfiles dependientes al eliminar un usuario
+userSchema.pre("findOneAndDelete", async function(next) {
+  try {
+    const doc = await this.model.findOne(this.getFilter()).lean();
+    if (doc?._id) {
+      const uid = doc._id;
+      await Promise.all([
+        ProfessionalModel.deleteOne({ user: uid }),
+        ClientModel.deleteOne({ user: uid }),
+        AdminModel.deleteOne?.({ user: uid }) ?? Promise.resolve(),
+      ]);
+    }
+    next();
+  } catch (e) { next(e); }
+});
 
 export default mongoose.model("User", userSchema);

@@ -2,7 +2,7 @@
 import express from "express";
 
 // Importamos las funciones que manejan la lógica de cada ruta
-import { createUser, getUsers, getMe, updateMe } from "../controllers/user.controller.js";
+import { createUser, getUsers, getMe, updateMe, deleteUser } from "../controllers/user.controller.js";
 
 // Importamos las validaciones y el middleware de resultado
 import { userValidationRules } from "../middlewares/user.validator.js";
@@ -30,6 +30,9 @@ router.get("/me", verifyToken, getMe); // ✅ Aquí va la nueva ruta
 
 // 📌 Ruta protegida: actualizar tu perfil (PUT /api/users/me)
 router.put("/me", verifyToken, updateMe); // ✅ Aquí va la nueva ruta
+
+// 📌 Ruta protegida: eliminar tu perfil (DELETE /api/users/me)
+router.delete("/:id", verifyToken, isAdmin, deleteUser); // ✅ Aquí va la nueva ruta
 
 // Exportamos el router para que pueda ser usado en index.js
 export default router;

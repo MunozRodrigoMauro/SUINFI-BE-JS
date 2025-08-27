@@ -3,11 +3,17 @@ import bcrypt from "bcrypt";
 import ProfessionalModel from "../models/Professional.js";
 import crypto from "crypto";
 import { sendVerificationEmail } from "../services/mailer.js";
+import { ensureProfileByRole } from "../services/ensureProfile.js";
+import ClientModel from "../models/Client.js";
+import AdminModel from "../models/Admin.js";
 
 // Crear usuario
 export const createUser = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    let { name, email, password, role } = req.body;
+
+    // tolera 'client' desde el FE, lo normaliza a 'user'
+    if (role === "client") role = "user";
 
     if (!name || !email || !password || !role) {
       return res.status(400).json({ message: "Missing required fields" });
@@ -34,6 +40,7 @@ export const createUser = async (req, res) => {
     });
 
     const savedUser = await user.save();
+    await ensureProfileByRole(savedUser);
 
     try {
       await sendVerificationEmail(savedUser.email, verifyToken);
@@ -142,5 +149,31 @@ export const getMyProfile = async (req, res) => {
   } catch (e) {
     console.error("❌ getMyProfile:", e);
     res.status(500).json({ error: "Server error" });
+  }
+};
+
+
+
+export const deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // limpia perfiles dependientes
+    await Promise.all([
+      ProfessionalModel.deleteOne({ user: id }),
+      ClientModel.deleteOne({ user: id }),
+      AdminModel.deleteOne?.({ user: id }) ?? Promise.resolve(),
+      // TODO opcional: Conversations.deleteMany({ participants: id })
+      // TODO opcional: Messages.deleteMany({ $or:[{from:id},{to:id}] })
+      // TODO opcional: Bookings.deleteMany({ $or:[{client:id},{professionalUserId:id}] })
+      // TODO opcional: Reviews.deleteMany({ $or:[{user:id},{professionalUser:id}] })
+    ]);
+
+    await UserModel.findByIdAndDelete(id);
+
+    return res.json({ message: "User eliminado y perfiles limpiados" });
+  } catch (e) {
+    console.error("deleteUser error", e);
+    return res.status(500).json({ message: "Server error" });
   }
 };

@@ -1,3 +1,4 @@
+// src/routes/professional.routes.js
 import express from "express";
 import {
   createProfessionalProfile,
@@ -18,6 +19,18 @@ import { validateResult } from "../middlewares/validateResult.js";
 
 const router = express.Router();
 
+// 👇 logger simple para ver si pega en este router
+router.use((req, _res, next) => {
+  console.log("➡️  [PRO ROUTE] hit", req.method, req.originalUrl);
+  next();
+});
+
+// ⚠️ Rutas específicas primero (evita conflictos con "/:id")
+router.patch("/availability", verifyToken, updateAvailabilityNow);
+router.patch("/availability-mode", verifyToken, setAvailabilityMode);
+router.put("/availability-schedule", verifyToken, updateAvailabilitySchedule);
+router.patch("/me/location", verifyToken, updateMyLocation);
+
 router.post("/", verifyToken, createProfessionalProfile);
 router.get("/", getProfessionals);
 router.get("/nearby", getNearbyProfessionals);
@@ -27,11 +40,7 @@ router.get("/me", verifyToken, getMyProfessional);
 router.put("/me", verifyToken, updateMyProfessional);
 router.patch("/me", verifyToken, patchMyProfessionalRules, validateResult, updateMyProfessional);
 
-router.patch("/availability-mode", verifyToken, setAvailabilityMode);
-router.patch("/me/location", verifyToken, updateMyLocation);
-router.put("/availability-schedule", verifyToken, updateAvailabilitySchedule);
-
+// ⚠️ Dejar "/:id" al final siempre
 router.get("/:id", getProfessionalById);
-router.patch("/availability", verifyToken, updateAvailabilityNow);
 
 export default router;

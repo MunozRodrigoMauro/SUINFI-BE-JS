@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { sendVerificationEmail } from "../services/mailer.js";
+import { ensureProfileByRole } from "../services/ensureProfile.js";
 
 // 📌 Login
 export const loginUser = async (req, res) => {
@@ -21,9 +22,11 @@ export const loginUser = async (req, res) => {
     if (!user.verified) {
       return res.status(403).json({
         code: "EMAIL_NOT_VERIFIED",
-        message: "Please verify your email to continue.",
+        message: "Por favor, veririca tu email para continuar.",
       });
     }
+
+    await ensureProfileByRole(user);
 
     const token = jwt.sign(
       { id: user._id, role: user.role },
@@ -32,7 +35,7 @@ export const loginUser = async (req, res) => {
     );
 
     res.status(200).json({
-      message: "Login successful",
+      message: "Login exitoso",
       token,
       user: {
         id: user._id,
@@ -74,6 +77,16 @@ export const verifyEmailByToken = async (req, res) => {
     // guardo sin tocar timestamps (opcional)
     await user.save();
 
+    // Auto-crear el stub al verificar email (consistencia)
+    if (user.role === "professional") {
+      await ProfessionalModel.updateOne(
+        { user: user._id },
+        { $setOnInsert: { user: user._id, status: "draft" } },
+        { upsert: true }
+      );
+    }
+
+
     console.log("✅ [verifyEmailByToken] email verificado para:", user.email);
     return res.status(200).json({ message: "Correo electrónico verificado exitosamente" });
   } catch (e) {
@@ -91,7 +104,7 @@ export const resendVerification = async (req, res) => {
     const user = await UserModel.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
     if (user.verified)
-      return res.status(200).json({ message: "Already verified" });
+      return res.status(200).json({ message: "Usuario ya verificado" });
 
     const token = crypto.randomBytes(32).toString("hex");
     const expires = new Date(Date.now() + 1000 * 60 * 60 * 48); // 48h
@@ -104,9 +117,9 @@ export const resendVerification = async (req, res) => {
       console.error("❌ Error enviando correo de verificación:", e);
     }
 
-    return res.status(200).json({ message: "Verification email sent" });
+    return res.status(200).json({ message: "Correo de verificación reenviado exitosamente" });
   } catch (e) {
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Error al reenviar correo de verificación" });
   }
 };
 
