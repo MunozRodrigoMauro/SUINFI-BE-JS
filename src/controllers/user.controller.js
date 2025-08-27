@@ -66,70 +66,122 @@ export const getUsers = async (_req, res) => {
   }
 };
 
-// Mi perfil (usuario logueado)
+/** GET /api/users/me */
 export const getMe = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const user = await UserModel.findById(userId).select("-password");
-    if (!user) return res.status(404).json({ message: "User not found" });
-    return res.status(200).json(user);
-  } catch (error) {
-    console.error("❌ Error al obtener perfil:", error);
-    return res.status(500).json({ message: "Server error", error });
+    const me = await UserModel.findById(req.user.id).lean();
+    if (!me) return res.status(404).json({ message: "User not found" });
+    res.json(me);
+  } catch (e) {
+    console.error("getMe error", e);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
-// Actualizar mi perfil
+/** PATCH /api/users/me
+ *  Actualiza datos básicos y address; si el user es professional, sincroniza su Professional.
+ */
 export const updateMe = async (req, res) => {
   try {
-    const userId = req.user?._id || req.user?.id;
+    const userId = req.user.id;
 
+    // Campos permitidos
     const allowed = [
-      "name", "password",
-      "address.country", "address.state", "address.city", "address.street", "address.number",
-      "address.unit", "address.postalCode",
+      "name",
+      "password", // si tuvieras hashing, aplicalo acá
+      "address.country",
+      "address.state",
+      "address.city",
+      "address.street",
+      "address.number",
+      "address.unit",
+      "address.postalCode",
       "address.label",
-      "address.location.lat", "address.location.lng",
+      "address.location.lat",
+      "address.location.lng",
     ];
 
     const payload = {};
-    for (const path of allowed) {
-      const [root, k1, k2] = path.split(".");
-      if (k2) {
-        if (!payload[root]) payload[root] = {};
-        if (!payload[root][k1]) payload[root][k1] = {};
-        if (req.body?.[root]?.[k1]?.[k2] != null) {
-          payload[root][k1][k2] = req.body[root][k1][k2];
+    for (const key of allowed) {
+      const parts = key.split(".");
+      let src = req.body;
+      let tgt = payload;
+      for (let i = 0; i < parts.length; i++) {
+        const k = parts[i];
+        const isLeaf = i === parts.length - 1;
+        if (!(k in src)) break;
+        if (isLeaf) {
+          tgt[k] = src[k];
+        } else {
+          src = src[k];
+          if (src == null) break;
+          if (!(k in tgt)) tgt[k] = {};
+          tgt = tgt[k];
         }
-      } else if (k1) {
-        if (!payload[root]) payload[root] = {};
-        if (req.body?.[root]?.[k1] != null) payload[root][k1] = req.body[root][k1];
-      } else if (req.body?.[root] != null) {
-        payload[root] = req.body[root];
       }
-    }
-
-    if (payload.password) {
-      if (String(payload.password).length < 6) {
-        return res.status(400).json({ message: "Password must be at least 6 characters" });
-      }
-      const bcryptMod = (await import("bcrypt")).default;
-      payload.password = await bcryptMod.hash(String(payload.password), 10);
     }
 
     const updatedUser = await UserModel.findByIdAndUpdate(
       userId,
       { $set: payload },
-      { new: true, runValidators: true }
-    );
+      { new: true }
+    ).lean();
 
     if (!updatedUser) return res.status(404).json({ message: "User not found" });
 
-    const { password: _pw, ...userSafe } = updatedUser.toObject();
-    return res.status(200).json({ user: userSafe });
-  } catch (error) {
-    console.error("❌ Error updating profile:", error);
-    return res.status(500).json({ message: "Server error" });
+    // Si es profesional, reflejar address + GeoJSON
+    if (updatedUser.role === "professional") {
+      const a = updatedUser.address || {};
+      const hasCoords =
+        a?.location &&
+        typeof a.location.lat === "number" &&
+        typeof a.location.lng === "number";
+
+      const proPatch = {
+        "address.country": a.country || "",
+        "address.state": a.state || "",
+        "address.city": a.city || "",
+        "address.street": a.street || "",
+        "address.number": a.number || "",
+        "address.unit": a.unit || "",
+        "address.postalCode": a.postalCode || "",
+        "address.label": a.label || "",
+        "address.location": hasCoords
+          ? { lat: a.location.lat, lng: a.location.lng }
+          : { lat: null, lng: null },
+      };
+
+      if (hasCoords) {
+        proPatch.location = {
+          type: "Point",
+          coordinates: [Number(a.location.lng), Number(a.location.lat)], // [lng, lat]
+        };
+        proPatch.lastLocationAt = new Date();
+      }
+
+      const pro = await ProfessionalModel.findOneAndUpdate(
+        { user: userId },
+        { $set: proPatch },
+        { new: true }
+      );
+
+      // Emitimos evento en vivo si hay coords
+      if (pro && hasCoords) {
+        const io = req.app.get("io");
+        io?.emit("pro:location:update", {
+          userId: String(userId),
+          lat: a.location.lat,
+          lng: a.location.lng,
+          at: new Date().toISOString(),
+          isAvailableNow: !!pro.isAvailableNow,
+        });
+      }
+    }
+
+    res.json({ message: "User updated", user: updatedUser });
+  } catch (e) {
+    console.error("updateMe error", e);
+    res.status(500).json({ message: "Server error" });
   }
 };
 

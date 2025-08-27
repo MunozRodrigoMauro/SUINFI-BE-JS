@@ -1,68 +1,70 @@
 // src/utils/schedule.js
-// Determina si la hora actual (en el huso horario elegido) cae dentro del
-// bloque de disponibilidad configurado para el día de hoy.
-//
-// availabilitySchedule esperado (ejemplo):
-// {
-//   lunes:     { from: "09:00", to: "18:00" },
-//   miércoles: { from: "14:00", to: "20:30" },
-//   sábado:    { from: "10:00", to: "14:00" }
-// }
-
 const TZ = process.env.TZ || "America/Argentina/Buenos_Aires";
 
-// Obtiene "HH:MM" de la hora actual en la TZ deseada
-function nowHHMM() {
-  const formatter = new Intl.DateTimeFormat("es-AR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: TZ,
-  });
-  // Formato "HH:MM"
-  return formatter.format(new Date());
+const DAY_KEYS = [
+  "domingo","lunes","martes","miércoles","jueves","viernes","sábado",
+];
+
+function nowZoned() {
+  const d = new Date();
+  const hh = new Intl.DateTimeFormat("es-AR", { hour: "2-digit", hour12: false, timeZone: TZ }).format(d);
+  const mm = new Intl.DateTimeFormat("es-AR", { minute: "2-digit", timeZone: TZ }).format(d);
+  const weekday = new Intl.DateTimeFormat("es-ES", { weekday: "long", timeZone: TZ }).format(d).toLowerCase();
+  return { hhmm: `${hh}:${mm}`, weekday };
 }
 
-// Obtiene el nombre del día en español en la TZ deseada ("lunes", "martes", "miércoles"...)
-function todayKeyES() {
-  const formatter = new Intl.DateTimeFormat("es-ES", {
-    weekday: "long",
-    timeZone: TZ,
-  });
-  // toLowerCase para empatar claves como "miércoles"
-  return formatter.format(new Date()).toLowerCase();
+function toMinutes(hhmm) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || "").trim());
+  if (!m) return null;
+  const H = Number(m[1]), M = Number(m[2]);
+  if (H < 0 || H > 23 || M < 0 || M > 59) return null;
+  return H * 60 + M;
 }
 
-// Compara rangos "HH:MM". Soporta rangos que cruzan medianoche (p.ej. 22:00 -> 02:00).
-function isTimeInRange(current, from, to) {
-  // Casos normales (no cruza medianoche): from <= to
-  if (from <= to) {
-    return current >= from && current < to;
+const strip = (s = "") => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function canonicalDayKey(k = "") {
+  const s = strip(k);
+  if (s === "miercoles") return "miércoles";
+  if (s === "sabado")   return "sábado";
+  return s;
+}
+function normalizeSchedule(scheduleLike) {
+  const obj = scheduleLike instanceof Map ? Object.fromEntries(scheduleLike)
+            : (typeof scheduleLike === "object" && scheduleLike) ? scheduleLike : {};
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    const canon = canonicalDayKey(k);
+    if (!canon) continue;
+    out[canon] = v || {};
   }
-  // Caso cruza medianoche: from > to (ej: 22:00 a 02:00)
-  // Está dentro si es >= from (misma noche) o < to (madrugada)
-  return current >= from || current < to;
+  return out;
 }
 
-/**
- * Devuelve true/false si AHORA cae dentro del horario del día actual.
- * @param {Object} availabilitySchedule - Mapa de días -> { from, to }
- * @returns {boolean}
- */
-export default function isNowWithinSchedule(availabilitySchedule = {}) {
-  if (!availabilitySchedule || typeof availabilitySchedule !== "object") return false;
+// ⬅️ fin EXCLUSIVO
+function isTimeInRangeMin(nowMin, fromMin, toMin) {
+  if (fromMin == null || toMin == null || nowMin == null) return false;
+  if (fromMin < toMin) {
+    // rango dentro del día: [from, to)
+    return nowMin >= fromMin && nowMin < toMin;
+  }
+  // cruza medianoche: [from, 24h) ∪ [0, to)
+  return nowMin >= fromMin || nowMin < toMin;
+}
 
-  const day = todayKeyES();       // ej: "miércoles"
-  const slot = availabilitySchedule[day];
+export default function isNowWithinSchedule(availabilitySchedule = {}) {
+  const schedule = normalizeSchedule(availabilitySchedule);
+  const { hhmm, weekday } = nowZoned();
+  const dayKey = canonicalDayKey(weekday);
+  if (!DAY_KEYS.includes(dayKey)) return false;
+
+  const slot = schedule[dayKey];
   if (!slot || !slot.from || !slot.to) return false;
 
-  const now = nowHHMM();          // ej: "15:37"
-  const from = slot.from.trim();  // "HH:MM"
-  const to = slot.to.trim();      // "HH:MM"
+  const nowMin  = toMinutes(hhmm);
+  const fromMin = toMinutes(slot.from);
+  const toMin   = toMinutes(slot.to);
+  if (fromMin == null || toMin == null || nowMin == null) return false;
+  if (fromMin === toMin) return false;
 
-  // Validación simple de formato HH:MM
-  const re = /^\d{2}:\d{2}$/;
-  if (!re.test(from) || !re.test(to)) return false;
-
-  return isTimeInRange(now, from, to);
+  return isTimeInRangeMin(nowMin, fromMin, toMin);
 }

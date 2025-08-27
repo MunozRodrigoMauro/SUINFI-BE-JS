@@ -38,7 +38,7 @@ const userSchema = new mongoose.Schema({
 // 👉 índice para búsquedas por token
 userSchema.index({ "emailVerification.token": 1 });
 
-// 👉 borra perfiles dependientes al eliminar un usuario
+//
 userSchema.pre("findOneAndDelete", async function(next) {
   try {
     const doc = await this.model.findOne(this.getFilter()).lean();

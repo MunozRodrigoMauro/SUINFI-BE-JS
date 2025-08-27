@@ -2,6 +2,34 @@
 import mongoose from "mongoose";
 import ProfessionalModel from "../models/Professional.js";
 import ServiceModel from "../models/Service.js";
+import isNowWithinSchedule from "../utils/schedule.js";
+
+/* Helpers: siempre devolver SOLO profesionales con user existente y verificado */
+function filterVerifiedWithUser(docs) {
+  return (docs || []).filter((p) => p?.user && p.user?.verified === true);
+}
+
+/* ───────────────────── Normalización de claves de días ───────────────────── */
+const strip = (s = "") => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function canonicalDayKey(k = "") {
+  const s = strip(k);
+  if (s === "miercoles") return "miércoles";
+  if (s === "sabado") return "sábado";
+  return s; // domingo,lunes,martes,jueves,viernes ya coinciden
+}
+function normalizeSchedule(scheduleLike = {}) {
+  // admite objeto o Map (por si viene de Mongoose)
+  const obj = scheduleLike instanceof Map ? Object.fromEntries(scheduleLike) : scheduleLike || {};
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    const canon = canonicalDayKey(k);
+    if (!canon) continue;
+    if (v && typeof v === "object" && v.from && v.to) {
+      out[canon] = { from: String(v.from).trim(), to: String(v.to).trim() };
+    }
+  }
+  return out;
+}
 
 /* Crear perfil profesional */
 export const createProfessionalProfile = async (req, res) => {
@@ -52,12 +80,6 @@ export const createProfessionalProfile = async (req, res) => {
   }
 };
 
-/* Helpers: siempre devolver SOLO profesionales con user existente y verificado */
-function filterVerifiedWithUser(docs) {
-  // cuando usamos populate + match, los que no matchean vienen con user = null
-  return (docs || []).filter((p) => p?.user && p.user?.verified === true);
-}
-
 /* Listado con filtros + paginación */
 export const getProfessionals = async (req, res) => {
   try {
@@ -83,18 +105,17 @@ export const getProfessionals = async (req, res) => {
     const pageNum = Math.max(parseInt(page) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit) || 12, 1), 50);
 
-    const [itemsRaw, totalRaw] = await Promise.all([
+    const [itemsRaw] = await Promise.all([
       ProfessionalModel.find(query)
         .populate({ path: "user", select: "name email phone verified", match: { verified: true } })
         .populate({ path: "services", select: "name price category", populate: { path: "category", select: "name" } })
         .sort({ isAvailableNow: -1, updatedAt: -1 })
         .skip((pageNum - 1) * limitNum)
         .limit(limitNum),
-      ProfessionalModel.countDocuments(query),
     ]);
 
     const items = filterVerifiedWithUser(itemsRaw);
-    const total = items.length; // solo los válidos
+    const total = items.length;
     const pages = Math.max(Math.ceil(total / limitNum), 1);
 
     return res.json({ items, total, page: pageNum, pages });
@@ -161,7 +182,7 @@ export const getNearbyProfessionals = async (req, res) => {
   }
 };
 
-/* Disponibilidad NOW (manual) */
+/* Disponibilidad NOW (manual override temporal) — NO cambia strategy */
 export const updateAvailabilityNow = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -173,7 +194,7 @@ export const updateAvailabilityNow = async (req, res) => {
 
     const updated = await ProfessionalModel.findOneAndUpdate(
       { user: userId },
-      { $set: { isAvailableNow, availabilityStrategy: "manual" } },
+      { $set: { isAvailableNow } }, // 👈 NO tocamos availabilityStrategy
       { new: true }
     ).populate({ path: "user", select: "verified", match: { verified: true } });
 
@@ -219,23 +240,67 @@ export const getAvailableNowProfessionals = async (_req, res) => {
 export const updateAvailabilitySchedule = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { availabilitySchedule } = req.body;
-    if (!availabilitySchedule || typeof availabilitySchedule !== "object") {
+
+    // 1) Validación básica
+    const raw = req.body?.availabilitySchedule;
+    if (!raw || typeof raw !== "object") {
       return res.status(400).json({ error: "Invalid availabilitySchedule" });
     }
-    const updated = await ProfessionalModel.findOneAndUpdate(
-      { user: userId },
-      { availabilitySchedule },
-      { new: true }
-    ).populate({ path: "user", select: "verified", match: { verified: true } });
 
-    if (!updated || !updated.user) {
+    // (opcional) validar formato HH:MM
+    const re = /^\d{2}:\d{2}$/;
+    for (const [day, slot] of Object.entries(raw)) {
+      if (!slot?.from || !slot?.to || !re.test(slot.from) || !re.test(slot.to)) {
+        return res.status(400).json({ error: `Bad time range for '${day}'` });
+      }
+    }
+
+    // 2) Normalizar claves (miercoles→miércoles, sabado→sábado, etc.)
+    const schedule = normalizeSchedule(raw);
+
+    // 3) Calcular estado actual según agenda
+    const shouldBeOn = isNowWithinSchedule(schedule);
+
+    // 4) Guardar: agenda + strategy schedule + sincronizar isAvailableNow
+    let saved = await ProfessionalModel.findOneAndUpdate(
+      { user: userId },
+      {
+        $set: {
+          availabilitySchedule: schedule,
+          availabilityStrategy: "schedule",
+          isAvailableNow: shouldBeOn,
+        },
+      },
+      { new: true }
+    );
+
+    if (!saved) {
       return res.status(404).json({ error: "Professional profile not found" });
     }
-    res.json({ message: "Availability updated", availabilitySchedule: updated.availabilitySchedule });
+
+    // 5) Responder con POJO de agenda (por si Mongoose la guarda como Map)
+    const plain =
+      saved.availabilitySchedule instanceof Map
+        ? Object.fromEntries(saved.availabilitySchedule)
+        : (saved.availabilitySchedule || {});
+
+    // 6) Notificar al FE
+    const io = req.app.get("io");
+    io?.emit("availability:update", {
+      userId: saved.user.toString(),
+      isAvailableNow: saved.isAvailableNow,
+      at: new Date().toISOString(),
+    });
+
+    return res.json({
+      message: "Availability updated",
+      availabilitySchedule: plain,
+      availabilityStrategy: saved.availabilityStrategy, // "schedule"
+      isAvailableNow: saved.isAvailableNow,
+    });
   } catch (error) {
     console.error("❌ Error updating availabilitySchedule:", error);
-    res.status(500).json({ error: "Server error" });
+    return res.status(500).json({ error: "Server error" });
   }
 };
 

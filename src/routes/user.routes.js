@@ -29,7 +29,7 @@ router.get("/", verifyToken, isAdmin, getUsers); // 🛡️ Solo con token váli
 router.get("/me", verifyToken, getMe); // ✅ Aquí va la nueva ruta
 
 // 📌 Ruta protegida: actualizar tu perfil (PUT /api/users/me)
-router.put("/me", verifyToken, updateMe); // ✅ Aquí va la nueva ruta
+router.patch("/me", verifyToken, updateMe); // ✅ Aquí va la nueva ruta
 
 // 📌 Ruta protegida: eliminar tu perfil (DELETE /api/users/me)
 router.delete("/:id", verifyToken, isAdmin, deleteUser); // ✅ Aquí va la nueva ruta

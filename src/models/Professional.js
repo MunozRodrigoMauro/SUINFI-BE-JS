@@ -17,7 +17,7 @@ const professionalSchema = new mongoose.Schema(
     ],
     bio: { type: String, trim: true, maxlength: 500 },
 
-    // Dirección "humana"
+    // Dirección "humana" (alineada con User)
     address: {
       country: { type: String, default: "" },
       state: { type: String, default: "" },
@@ -26,15 +26,20 @@ const professionalSchema = new mongoose.Schema(
       number: { type: String, default: "" },
       unit: { type: String, default: "" },
       postalCode: { type: String, default: "" },
+      // ⬇️ NUEVO: label + location para que el FE pueda leer p.address.location
+      label: { type: String, default: "" },
+      location: {
+        lat: { type: Number, default: null },
+        lng: { type: Number, default: null },
+      },
     },
 
-    // GeoJSON [lng, lat]
+    // GeoJSON [lng, lat] — lo usa /nearby
     location: {
       type: { type: String, enum: ["Point"], default: "Point" },
       coordinates: { type: [Number], default: [0, 0] },
     },
 
-    // ⬅️ top-level para evitar inconsistencias
     lastLocationAt: { type: Date, default: Date.now },
 
     isAvailableNow: { type: Boolean, default: false },
@@ -71,7 +76,7 @@ const professionalSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// ✅ índice geoespacial correcto
+// Índice geoespacial correcto
 professionalSchema.index({ location: "2dsphere" });
 
 export default mongoose.model("Professional", professionalSchema);

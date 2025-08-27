@@ -26,9 +26,9 @@ router.use((req, _res, next) => {
 });
 
 // ⚠️ Rutas específicas primero (evita conflictos con "/:id")
-router.patch("/availability", verifyToken, updateAvailabilityNow);
+router.patch("/availability", verifyToken, updateAvailabilityNow);          // NO cambia strategy
 router.patch("/availability-mode", verifyToken, setAvailabilityMode);
-router.put("/availability-schedule", verifyToken, updateAvailabilitySchedule);
+router.put("/availability-schedule", verifyToken, updateAvailabilitySchedule); // fuerza "schedule" + sync now
 router.patch("/me/location", verifyToken, updateMyLocation);
 
 router.post("/", verifyToken, createProfessionalProfile);
