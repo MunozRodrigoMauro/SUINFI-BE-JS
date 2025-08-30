@@ -1,4 +1,7 @@
 // src/index.js
+
+import path from "path";
+import fs from "fs";
 // Importamos las dependencias principales
 import cors from "cors";
 import express from "express";
@@ -36,6 +39,7 @@ import jwt from "jsonwebtoken";
 
 dotenv.config();
 
+// Inicialización de app (DEBE IR ANTES de cualquier uso de app)
 const app = express();
 app.use(express.json());
 
@@ -48,6 +52,11 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
+// 📂 Static /uploads (MOVIDO DESPUÉS de inicializar app)
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.resolve("uploads");
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+app.use("/uploads", express.static(UPLOAD_DIR, { maxAge: "1d", index: false }));
 
 // 🚀 HTTP server + Socket.IO
 const httpServer = createServer(app);

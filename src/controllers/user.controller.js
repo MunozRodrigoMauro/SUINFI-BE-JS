@@ -6,6 +6,7 @@ import { sendVerificationEmail } from "../services/mailer.js";
 import { ensureProfileByRole } from "../services/ensureProfile.js";
 import ClientModel from "../models/Client.js";
 import AdminModel from "../models/Admin.js";
+import path from "path";
 
 // Crear usuario
 export const createUser = async (req, res) => {
@@ -227,5 +228,86 @@ export const deleteUser = async (req, res) => {
   } catch (e) {
     console.error("deleteUser error", e);
     return res.status(500).json({ message: "Server error" });
+  }
+};
+
+/** PATCH /api/users/me/avatar  (multipart: file) */
+export const uploadMyAvatar = async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: "Archivo requerido (file)" });
+
+    const rel = path.posix.join("/uploads", "avatars", req.file.filename);
+    const userId = req.user.id;
+
+    const updated = await UserModel.findByIdAndUpdate(
+      userId,
+      { $set: { avatarUrl: rel } },
+      { new: true, select: "-password" }
+    ).lean();
+
+    // si es profesional, sincronizamos
+    if (updated?.role === "professional") {
+      await ProfessionalModel.findOneAndUpdate(
+        { user: userId },
+        { $set: { avatarUrl: rel } },
+        { new: false }
+      );
+    }
+
+    return res.json({ message: "Avatar actualizado", url: rel, user: updated });
+  } catch (e) {
+    console.error("uploadMyAvatar error:", e);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const deleteMyAvatar = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Actualizar usuario para eliminar avatar
+    const updatedUser = await UserModel.findByIdAndUpdate(
+      userId,
+      { 
+        $set: { 
+          avatarUrl: null, // o "" dependiendo de tu schema
+          updatedAt: new Date()
+        } 
+      },
+      { 
+        new: true, 
+        select: "-password"
+      }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
+    // Si es profesional, sincronizar
+    if (updatedUser.role === "professional") {
+      try {
+        await ProfessionalModel.findOneAndUpdate(
+          { user: userId },
+          { 
+            $set: { 
+              avatarUrl: null,
+              updatedAt: new Date()
+            } 
+          }
+        );
+      } catch (proError) {
+        console.error("Error al actualizar profesional:", proError);
+      }
+    }
+
+    return res.json({ 
+      message: "Avatar eliminado", 
+      user: updatedUser 
+    });
+
+  } catch (error) {
+    console.error("deleteMyAvatar error:", error);
+    return res.status(500).json({ message: "Error del servidor" });
   }
 };

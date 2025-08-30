@@ -63,75 +63,41 @@ export async function sendVerificationEmail(to, token) {
   const html = `
   <div style="margin:0;padding:0;background:#f7f8fb">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f8fb;padding:24px 0">
-      <tr>
-        <td align="center">
-          <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;box-shadow:0 6px 24px rgba(16,24,40,.06);border:1px solid #e5e7eb">
-            
-            <!-- SUINFI texto a la izquierda -->
-            <tr>
-              <td style="padding:24px 28px 0 28px;text-align:left">
-                <div style="font-weight:800;font-size:22px;letter-spacing:.5px;
-                  font-family:system-ui,-apple-system,Segoe UI,Roboto;
-                  color:#1f2a44;">
-                  SUINFI
-                </div>
-              </td>
-            </tr>
-
-            <tr>
-              <td style="padding:16px 28px 0 28px;text-align:left">
-                <p style="margin:0;color:#475569;font-size:14px;line-height:1.6;font-family:system-ui,-apple-system,Segoe UI,Roboto">
-                  Bienvenid@, para activar tu cuenta hacé click en el botón:
-                </p>
-              </td>
-            </tr>
-
-            <!-- Botón (más grande) -->
-            <tr>
-              <td align="center" style="padding:20px 28px 0 28px">
-                <a href="${link}"
-                   style="display:inline-block;background:linear-gradient(180deg,#1f2a44,#111827);color:#ffffff;text-decoration:none;
-                          padding:14px 24px;border-radius:12px;font-weight:800;font-size:16px;
-                          font-family:system-ui,-apple-system,Segoe UI,Roboto;cursor:pointer">
-                  Verificar mi correo
-                </a>
-              </td>
-            </tr>
-
-            <!-- Enlace alternativo -->
-            <tr>
-              <td style="padding:20px 28px 0 28px">
-                <p style="margin:0 0 6px 0;color:#64748b;font-size:12px;line-height:1.6;font-family:system-ui,-apple-system,Segoe UI,Roboto">
-                  Si el botón no funciona, copiá y pegá este enlace en tu navegador:
-                </p>
-                <div style="word-break:break-all;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px">
-                  <a href="${link}" style="color:#0a0e17;text-decoration:none;font-size:12px;font-family:ui-monospace,monospace">${link}</a>
-                </div>
-                <p style="margin:10px 0 0 0;color:#94a3b8;font-size:12px;font-family:system-ui,-apple-system,Segoe UI,Roboto">
-                  Este enlace expira en 48 horas.
-                </p>
-              </td>
-            </tr>
-
-            <!-- Footer -->
-            <tr>
-              <td style="padding:24px 28px 28px 28px">
-                <hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 12px 0"/>
-                <p style="margin:0;color:#94a3b8;font-size:11px;line-height:1.6;font-family:system-ui,-apple-system,Segoe UI,Roboto">
-                  Recibiste este mensaje porque creaste una cuenta en SUINFI. Si no fuiste vos, podés ignorarlo.
-                </p>
-              </td>
-            </tr>
-          </table>
-
-          <div style="color:#94a3b8;font-size:11px;margin-top:12px;font-family:system-ui,-apple-system,Segoe UI,Roboto">
-            © ${new Date().getFullYear()} SUINFI
-          </div>
-        </td>
-      </tr>
+      <tr><td align="center">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;box-shadow:0 6px 24px rgba(16,24,40,.06);border:1px solid #e5e7eb">
+          <tr><td style="padding:24px 28px 0 28px;text-align:left">
+            <div style="font-weight:800;font-size:22px;letter-spacing:.5px;font-family:system-ui,-apple-system,Segoe UI,Roboto;color:#1f2a44;">SUINFI</div>
+          </td></tr>
+          <tr><td style="padding:16px 28px 0 28px;text-align:left">
+            <p style="margin:0;color:#475569;font-size:14px;line-height:1.6;font-family:system-ui,-apple-system,Segoe UI,Roboto">Bienvenid@, para activar tu cuenta hacé click en el botón:</p>
+          </td></tr>
+          <tr><td align="center" style="padding:20px 28px 0 28px">
+            <a href="${link}" style="display:inline-block;background:linear-gradient(180deg,#1f2a44,#111827);color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:12px;font-weight:800;font-size:16px;font-family:system-ui,-apple-system,Segoe UI,Roboto;cursor:pointer">
+              Verificar mi correo
+            </a>
+          </td></tr>
+          <tr><td style="padding:20px 28px 0 28px">
+            <p style="margin:0 0 6px 0;color:#64748b;font-size:12px;line-height:1.6;font-family:system-ui,-apple-system,Segoe UI,Roboto">
+              Si el botón no funciona, copiá y pegá este enlace en tu navegador:
+            </p>
+            <div style="word-break:break-all;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px">
+              <a href="${link}" style="color:#0a0e17;text-decoration:none;font-size:12px;font-family:ui-monospace,monospace">${link}</a>
+            </div>
+            <p style="margin:10px 0 0 0;color:#94a3b8;font-size:12px;font-family:system-ui,-apple-system,Segoe UI,Roboto">
+              Este enlace expira en 48 horas.
+            </p>
+          </td></tr>
+          <tr><td style="padding:24px 28px 28px 28px">
+            <hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 12px 0"/>
+            <p style="margin:0;color:#94a3b8;font-size:11px;line-height:1.6;font-family:system-ui,-apple-system,Segoe UI,Roboto">
+              Recibiste este mensaje porque creaste una cuenta en SUINFI. Si no fuiste vos, podés ignorarlo.
+            </p>
+          </td></tr>
+        </table>
+        <div style="color:#94a3b8;font-size:11px;margin-top:12px;font-family:system-ui,-apple-system,Segoe UI,Roboto">© ${new Date().getFullYear()} SUINFI</div>
+      </td></tr>
     </table>
-  </div>
-  `;
+  </div>`;
 
   const transporter = await getTransporter();
   if (!transporter) {
@@ -140,18 +106,70 @@ export async function sendVerificationEmail(to, token) {
     return { dev: true };
   }
 
-  try {
-    const info = await transporter.sendMail({
-      from: SMTP_FROM,
-      to,
-      subject,
-      text,
-      html,
-    });
-    console.log("📨 Email enviado:", info?.messageId || "(sin id)");
-    return { ok: true, id: info?.messageId };
-  } catch (err) {
-    console.error("❌ Error enviando verificación:", err?.message || err);
-    throw err;
+  const info = await transporter.sendMail({ from: SMTP_FROM, to, subject, text, html });
+  console.log("📨 Email enviado:", info?.messageId || "(sin id)");
+  return { ok: true, id: info?.messageId };
+}
+
+export async function sendPasswordResetEmail(to, name, token) {
+  const { APP_PUBLIC_URL, SMTP_FROM } = getConfig();
+  const link = `${APP_PUBLIC_URL}/reset-password?token=${encodeURIComponent(token)}`;
+  const subject = "Restablecer contraseña – SUINFI";
+
+  const text = [
+    `Hola ${name || ""},`,
+    "Recibimos una solicitud para restablecer tu contraseña.",
+    "Si fuiste vos, abrí este enlace (válido por 1 hora):",
+    link,
+    "",
+    "Si no solicitaste esto, ignorá este mensaje.",
+  ].join("\n");
+
+  const html = `
+  <div style="margin:0;padding:0;background:#f7f8fb">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f8fb;padding:24px 0">
+      <tr><td align="center">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;box-shadow:0 6px 24px rgba(16,24,40,.06);border:1px solid #e5e7eb">
+          <tr><td style="padding:24px 28px 0 28px;text-align:left">
+            <div style="font-weight:800;font-size:22px;letter-spacing:.5px;font-family:system-ui,-apple-system,Segoe UI,Roboto;color:#1f2a44;">SUINFI</div>
+          </td></tr>
+          <tr><td style="padding:16px 28px 0 28px;text-align:left">
+            <p style="margin:0;color:#475569;font-size:14px;line-height:1.6;font-family:system-ui,-apple-system,Segoe UI,Roboto">
+              Hola ${name || ""}, hacé click para restablecer tu contraseña (válido 1 hora):
+            </p>
+          </td></tr>
+          <tr><td align="center" style="padding:20px 28px 0 28px">
+            <a href="${link}" style="display:inline-block;background:linear-gradient(180deg,#1f2a44,#111827);color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:12px;font-weight:800;font-size:16px;font-family:system-ui,-apple-system,Segoe UI,Roboto;cursor:pointer">
+              Restablecer contraseña
+            </a>
+          </td></tr>
+          <tr><td style="padding:20px 28px 0 28px">
+            <p style="margin:0 0 6px 0;color:#64748b;font-size:12px;line-height:1.6;font-family:system-ui,-apple-system,Segoe UI,Roboto">
+              Si el botón no funciona, copiá y pegá este enlace:
+            </p>
+            <div style="word-break:break-all;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px">
+              <a href="${link}" style="color:#0a0e17;text-decoration:none;font-size:12px;font-family:ui-monospace,monospace">${link}</a>
+            </div>
+          </td></tr>
+          <tr><td style="padding:24px 28px 28px 28px">
+            <hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 12px 0"/>
+            <p style="margin:0;color:#94a3b8;font-size:11px;line-height:1.6;font-family:system-ui,-apple-system,Segoe UI,Roboto">
+              Si no solicitaste esto, ignorá este correo.
+            </p>
+          </td></tr>
+        </table>
+        <div style="color:#94a3b8;font-size:11px;margin-top:12px;font-family:system-ui,-apple-system,Segoe UI,Roboto">© ${new Date().getFullYear()} SUINFI</div>
+      </td></tr>
+    </table>
+  </div>`;
+
+  const transporter = await getTransporter();
+  if (!transporter) {
+    console.log("📧 [DEV] Enviar a:", to);
+    console.log("📧 [DEV] Link:", link);
+    return { dev: true };
   }
+  const info = await transporter.sendMail({ from: SMTP_FROM, to, subject, text, html });
+  console.log("📨 Reset mail enviado:", info?.messageId || "(sin id)");
+  return { ok: true, id: info?.messageId };
 }

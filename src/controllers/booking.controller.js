@@ -54,8 +54,8 @@ export const createBooking = async (req, res) => {
     });
 
     const populated = await Booking.findById(booking._id)
-      .populate("client", "name email")
-      .populate({ path: "professional", populate: { path: "user", select: "name email" } })
+      .populate("client", "name email avatarUrl")
+      .populate({ path: "professional", populate: { path: "user", select: "name email avatarUrl" } })
       .populate("service", "name price");
 
     const io = req.app.get("io");
@@ -87,7 +87,7 @@ export const getMyBookings = async (req, res) => {
 
     const list = await Booking.find(q)
       .sort({ scheduledAt: -1 })
-      .populate({ path: "professional", populate: { path: "user", select: "name email" } })
+      .populate({ path: "professional", populate: { path: "user", select: "name email avatarUrl" } })
       .populate("service", "name price");
 
     res.json(list);
@@ -113,7 +113,7 @@ export const getBookingsForMe = async (req, res) => {
 
     const list = await Booking.find(q)
       .sort({ scheduledAt: 1 })
-      .populate("client", "name email")
+      .populate("client", "name email avatarUrl")
       .populate("service", "name price");
 
     res.json(list);

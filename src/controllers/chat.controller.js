@@ -23,7 +23,7 @@ export const listMyChats = async (req, res) => {
       if (String(p) !== String(me)) ids.add(String(p));
     })
   );
-  const others = await User.find({ _id: { $in: [...ids] } }, "name email role").lean();
+  const others = await User.find({ _id: { $in: [...ids] } }, "name email role avatarUrl").lean();
   const map = new Map(others.map(u => [String(u._id), u]));
 
   // unread por chat
@@ -70,7 +70,7 @@ export const getOrCreateWithOther = async (req, res) => {
   }
 
   // Asegurar que exista el otro usuario
-  const other = await User.findById(otherUserId, "name email role");
+  const other = await User.findById(otherUserId, "name email role avatarUrl");
   if (!other) return res.status(404).json({ message: "Destinatario no existe" });
 
   // Buscar o crear la conversacion en **Conversation**

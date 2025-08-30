@@ -1,4 +1,4 @@
-// src/models/User.js
+// src/models/User.js 
 import mongoose from "mongoose";
 import ProfessionalModel from "./Professional.js";
 import ClientModel from "./Client.js";
@@ -33,12 +33,17 @@ const userSchema = new mongoose.Schema({
   address:  { type: addressSchema, default: () => ({}) },
   verified: { type: Boolean, default: false },
   emailVerification: { type: emailVerificationSchema, default: () => ({}) },
+  avatarUrl: { type: String, default: "" },
+  // 🔐 Reset de contraseña
+  passwordResetTokenHash: { type: String, index: true, default: null },
+  passwordResetExpiresAt: { type: Date, default: null },
 }, { timestamps: true });
 
-// 👉 índice para búsquedas por token
+// índices útiles
 userSchema.index({ "emailVerification.token": 1 });
+userSchema.index({ passwordResetTokenHash: 1, passwordResetExpiresAt: 1 });
 
-//
+// 👉 borra perfiles dependientes al eliminar un usuario
 userSchema.pre("findOneAndDelete", async function(next) {
   try {
     const doc = await this.model.findOne(this.getFilter()).lean();

@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import ProfessionalModel from "../models/Professional.js";
 import ServiceModel from "../models/Service.js";
 import isNowWithinSchedule from "../utils/schedule.js";
+import path from "path";
 
 /* Helpers: siempre devolver SOLO profesionales con user existente y verificado */
 function filterVerifiedWithUser(docs) {
@@ -29,6 +30,12 @@ function normalizeSchedule(scheduleLike = {}) {
     }
   }
   return out;
+}
+
+function docKeyFromType(type) {
+  if (type === "criminal-record") return "criminalRecord";
+  if (type === "license") return "license";
+  return null;
 }
 
 /* Crear perfil profesional */
@@ -107,7 +114,7 @@ export const getProfessionals = async (req, res) => {
 
     const [itemsRaw] = await Promise.all([
       ProfessionalModel.find(query)
-        .populate({ path: "user", select: "name email phone verified", match: { verified: true } })
+        .populate({ path: "user", select: "name email phone verified avatarUrl", match: { verified: true } })
         .populate({ path: "services", select: "name price category", populate: { path: "category", select: "name" } })
         .sort({ isAvailableNow: -1, updatedAt: -1 })
         .skip((pageNum - 1) * limitNum)
@@ -130,7 +137,7 @@ export const getProfessionalById = async (req, res) => {
   try {
     const { id } = req.params;
     const professional = await ProfessionalModel.findById(id)
-      .populate({ path: "user", select: "name email verified", match: { verified: true } })
+      .populate({ path: "user", select: "name email verified avatarUrl", match: { verified: true } })
       .populate({ path: "services", select: "name description price category", populate: { path: "category", select: "name" } });
 
     if (!professional || !professional.user) {
@@ -171,7 +178,7 @@ export const getNearbyProfessionals = async (req, res) => {
         },
       },
     })
-      .populate({ path: "user", select: "name email verified", match: { verified: true } })
+      .populate({ path: "user", select: "name email verified avatarUrl", match: { verified: true } })
       .populate({ path: "services", select: "name price category", populate: { path: "category", select: "name" } });
 
     const pros = filterVerifiedWithUser(raw);
@@ -224,7 +231,7 @@ export const updateAvailabilityNow = async (req, res) => {
 export const getAvailableNowProfessionals = async (_req, res) => {
   try {
     const raw = await ProfessionalModel.find({ isAvailableNow: true })
-      .populate({ path: "user", select: "name email phone verified", match: { verified: true } })
+      .populate({ path: "user", select: "name email phone verified avatarUrl", match: { verified: true } })
       .populate({ path: "services", select: "name price category", populate: { path: "category", select: "name" } })
       .sort({ updatedAt: -1 });
 
@@ -309,10 +316,11 @@ export const getMyProfessional = async (req, res) => {
   try {
     const userId = req.user.id;
     const doc = await ProfessionalModel.findOne({ user: userId })
-      .populate({ path: "user", select: "name email verified", match: { verified: true } });
+      .populate({ path: "user", select: "name email verified avatarUrl", match: { verified: true } });
 
     if (!doc || !doc.user) {
-      return res.status(404).json({ message: "Professional profile not found" });
+      // 200 sin _id -> el FE ya evalúa !!mine?._id como false
+      return res.json({ exists: false });
     }
     res.json(doc);
   } catch (e) {
@@ -369,7 +377,7 @@ export const setAvailabilityMode = async (req, res) => {
       { user: userId },
       { $set: { availabilityStrategy: mode } },
       { new: true }
-    ).populate({ path: "user", select: "verified", match: { verified: true } });
+    ).populate({ path: "user", select: "verified avatarUrl", match: { verified: true } });
 
     if (!updated || !updated.user) {
       return res.status(404).json({ message: "Professional profile not found" });
@@ -412,5 +420,76 @@ export const updateMyLocation = async (req, res) => {
   } catch (e) {
     console.error("updateMyLocation error", e);
     res.status(500).json({ error: "Server error" });
+  }
+};
+
+/** POST /api/professionals/me/docs/:type  (type: criminal-record | license)  multipart: file */
+export const uploadMyDocument = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const type = req.params.type;
+    const key = docKeyFromType(type);
+    if (!key) return res.status(400).json({ message: "Tipo de documento inválido" });
+    if (!req.file) return res.status(400).json({ message: "Archivo requerido (PDF)" });
+
+    const pro = await ProfessionalModel.findOne({ user: userId });
+    if (!pro) return res.status(404).json({ message: "Professional profile not found" });
+
+    const rel = path.posix.join("/uploads", "docs", String(userId), req.file.filename);
+    const uploadedAt = new Date();
+    const meta = {
+      url: rel,
+      fileName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      fileSize: req.file.size,
+      uploadedAt,
+      status: "pending",
+    };
+    if (key === "criminalRecord") {
+      const sixMonths = 1000 * 60 * 60 * 24 * 30 * 6;
+      meta.expiresAt = new Date(uploadedAt.getTime() + sixMonths);
+    }
+
+    pro.documents = pro.documents || {};
+    pro.documents[key] = { ...(pro.documents[key] || {}), ...meta };
+    await pro.save();
+
+    return res.json({
+      message: "Documento actualizado",
+      documents: pro.documents,
+    });
+  } catch (e) {
+    console.error("uploadMyDocument error:", e);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+/** GET /api/professionals/:id/docs/meta */
+export const getDocsMeta = async (req, res) => {
+  try {
+    const pro = await ProfessionalModel.findById(req.params.id)
+      .populate({ path: "user", select: "verified", match: { verified: true } });
+    if (!pro || !pro.user) return res.status(404).json({ message: "Not found" });
+
+    const now = Date.now();
+    const cr = pro.documents?.criminalRecord || null;
+    const lic = pro.documents?.license || null;
+
+    const clean = (d) => d ? ({
+      url: d.url || "",
+      fileName: d.fileName || "",
+      uploadedAt: d.uploadedAt,
+      expiresAt: d.expiresAt,
+      status: d.status || "pending",
+      expired: d.expiresAt ? new Date(d.expiresAt).getTime() < now : false,
+    }) : null;
+
+    res.json({
+      criminalRecord: clean(cr),
+      license: clean(lic),
+    });
+  } catch (e) {
+    console.error("getDocsMeta error:", e);
+    res.status(500).json({ message: "Server error" });
   }
 };

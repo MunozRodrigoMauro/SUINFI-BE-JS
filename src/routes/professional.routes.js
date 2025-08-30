@@ -12,10 +12,13 @@ import {
   updateMyProfessional,
   setAvailabilityMode,
   updateMyLocation,
+  uploadMyDocument,
+  getDocsMeta,
 } from "../controllers/professional.controller.js";
 import { verifyToken } from "../middlewares/auth.middleware.js";
 import { patchMyProfessionalRules } from "../middlewares/professional.validator.js";
 import { validateResult } from "../middlewares/validateResult.js";
+import { uploadDoc } from "../middlewares/upload.js";
 
 const router = express.Router();
 
@@ -39,6 +42,9 @@ router.get("/available-now", getAvailableNowProfessionals);
 router.get("/me", verifyToken, getMyProfessional);
 router.put("/me", verifyToken, updateMyProfessional);
 router.patch("/me", verifyToken, patchMyProfessionalRules, validateResult, updateMyProfessional);
+
+router.post("/me/docs/:type", verifyToken, uploadDoc, uploadMyDocument); // :type = criminal-record | license
+router.get("/:id/docs/meta", getDocsMeta);
 
 // ⚠️ Dejar "/:id" al final siempre
 router.get("/:id", getProfessionalById);

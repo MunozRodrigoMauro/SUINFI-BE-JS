@@ -1,9 +1,13 @@
+// src/controllers/auth.controller.js
 import UserModel from "../models/User.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { sendVerificationEmail } from "../services/mailer.js";
+import { sendVerificationEmail, sendPasswordResetEmail } from "../services/mailer.js";
 import { ensureProfileByRole } from "../services/ensureProfile.js";
+import ProfessionalModel from "../models/Professional.js";
+
+const hashToken = (t) => crypto.createHash("sha256").update(t).digest("hex");
 
 // 📌 Login
 export const loginUser = async (req, res) => {
@@ -18,7 +22,6 @@ export const loginUser = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
 
-    // Bloqueo si NO verificado
     if (!user.verified) {
       return res.status(403).json({
         code: "EMAIL_NOT_VERIFIED",
@@ -37,12 +40,7 @@ export const loginUser = async (req, res) => {
     res.status(200).json({
       message: "Login exitoso",
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
+      user: { id: user._id, name: user.name, email: user.email, role: user.role },
     });
   } catch (error) {
     res.status(500).json({ message: "Server error", error });
@@ -53,31 +51,19 @@ export const loginUser = async (req, res) => {
 export const verifyEmailByToken = async (req, res) => {
   try {
     const { token } = req.params;
-    console.log("🔎 [verifyEmailByToken] token recibido:", token ? token.slice(0,12) + "…" : "(vacío)");
+    if (!token) return res.status(400).json({ message: "Missing token" });
 
-    if (!token) {
-      return res.status(400).json({ message: "Missing token" });
-    }
-
-    // Busco user con token vigente
     const user = await UserModel.findOne({
       "emailVerification.token": token,
       "emailVerification.expiresAt": { $gt: new Date() },
     });
 
-    if (!user) {
-      console.log("🔎 [verifyEmailByToken] no se encontró usuario para ese token");
-      return res.status(400).json({ message: "Token expirado o inválido" });
-    }
+    if (!user) return res.status(400).json({ message: "Token expirado o inválido" });
 
-    // Marcar verificado y limpiar token
     user.verified = true;
     user.emailVerification = { token: "", expiresAt: null };
-
-    // guardo sin tocar timestamps (opcional)
     await user.save();
 
-    // Auto-crear el stub al verificar email (consistencia)
     if (user.role === "professional") {
       await ProfessionalModel.updateOne(
         { user: user._id },
@@ -86,11 +72,8 @@ export const verifyEmailByToken = async (req, res) => {
       );
     }
 
-
-    console.log("✅ [verifyEmailByToken] email verificado para:", user.email);
     return res.status(200).json({ message: "Correo electrónico verificado exitosamente" });
   } catch (e) {
-    console.error("❌ [verifyEmailByToken] error:", e);
     return res.status(500).json({ message: "Server error" });
   }
 };
@@ -103,48 +86,105 @@ export const resendVerification = async (req, res) => {
 
     const user = await UserModel.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
-    if (user.verified)
-      return res.status(200).json({ message: "Usuario ya verificado" });
+    if (user.verified) return res.status(200).json({ message: "Usuario ya verificado" });
 
     const token = crypto.randomBytes(32).toString("hex");
-    const expires = new Date(Date.now() + 1000 * 60 * 60 * 48); // 48h
+    const expires = new Date(Date.now() + 1000 * 60 * 60 * 48);
     user.emailVerification = { token, expiresAt: expires };
     await user.save();
 
-    try {
-      await sendVerificationEmail(user.email, token);
-    } catch (e) {
-      console.error("❌ Error enviando correo de verificación:", e);
-    }
-
+    try { await sendVerificationEmail(user.email, token); } catch {}
     return res.status(200).json({ message: "Correo de verificación reenviado exitosamente" });
   } catch (e) {
     return res.status(500).json({ message: "Error al reenviar correo de verificación" });
   }
 };
 
+/* ==================== 🔐 Reset de contraseña (público) ==================== */
+
+// POST /api/auth/password-reset/request  { email }
+export async function requestPasswordReset(req, res) {
+  const { email } = req.body || {};
+  // Siempre respondemos 200 (sin filtrar si existe o no)
+  try {
+    const user = email ? await UserModel.findOne({ email: email.toLowerCase() }) : null;
+    if (user) {
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      user.passwordResetTokenHash = hashToken(rawToken);
+      user.passwordResetExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+      await user.save();
+
+      try {
+        await sendPasswordResetEmail(user.email, user.name || user.email, rawToken);
+      } catch (e) {
+        console.warn("reset mail error:", e?.message || e);
+      }
+    }
+    return res.json({ message: "Si el email existe, te enviamos instrucciones." });
+  } catch {
+    return res.json({ message: "Si el email existe, te enviamos instrucciones." });
+  }
+}
+
+// POST /api/auth/password-reset/confirm  { token, newPassword }
+export async function confirmPasswordReset(req, res) {
+  const { token, newPassword } = req.body || {};
+  if (!token || !newPassword) return res.status(400).json({ message: "Datos inválidos" });
+
+  // Validación básica/consistente con registro
+  const strong =
+    typeof newPassword === "string" &&
+    newPassword.length >= 8 &&
+    /[a-z]/.test(newPassword) &&
+    /[A-Z]/.test(newPassword) &&
+    /\d/.test(newPassword) &&
+    /[!@#$%^&*]/.test(newPassword);
+
+  if (!strong) {
+    return res.status(400).json({
+      message: "La nueva contraseña no cumple los requisitos.",
+    });
+  }
+
+  const tokenHash = hashToken(token);
+  const now = new Date();
+  const user = await UserModel.findOne({
+    passwordResetTokenHash: tokenHash,
+    passwordResetExpiresAt: { $gt: now },
+  });
+
+  if (!user) return res.status(400).json({ message: "Token inválido o vencido" });
+
+  const salt = await bcrypt.genSalt(10);
+  user.password = await bcrypt.hash(newPassword, salt);
+  user.passwordResetTokenHash = null;
+  user.passwordResetExpiresAt = null;
+  await user.save();
+
+  return res.json({ message: "Contraseña actualizada" });
+}
+
+/* ==================== DEBUG helpers (dev) ==================== */
 export const debugGetUserByEmail = async (req, res) => {
   try {
     const { email } = req.query;
     if (!email) return res.status(400).json({ message: "Missing email" });
-
     const user = await UserModel.findOne({ email }).lean();
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // devolvemos solo lo necesario
     return res.json({
       id: user._id,
       email: user.email,
       verified: user.verified,
-      emailVerification: user.emailVerification, // { token, expiresAt }
+      emailVerification: user.emailVerification,
+      hasReset: Boolean(user.passwordResetTokenHash),
+      resetExp: user.passwordResetExpiresAt,
     });
   } catch (e) {
-    console.error("[debugGetUserByEmail] error:", e);
     return res.status(500).json({ message: "Server error" });
   }
 };
 
-// Regenera token de verificación para ese email (y opcionalmente reenvía)
 export const debugRegenerateToken = async (req, res) => {
   try {
     const { email, send = "false" } = req.body || {};
@@ -153,29 +193,17 @@ export const debugRegenerateToken = async (req, res) => {
     const user = await UserModel.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    const token = crypto.randomBytes(32).toString("hex");
+    const token = crypto.randomBytes(32).toString("hex").toLowerCase();
     const expires = new Date(Date.now() + 1000 * 60 * 60 * 48);
     user.emailVerification = { token, expiresAt: expires };
     await user.save();
 
     if (String(send).toLowerCase() === "true") {
-      // envío “best-effort”
-      try {
-        const { sendVerificationEmail } = await import("../services/mailer.js");
-        await sendVerificationEmail(user.email, token);
-      } catch (e) {
-        console.warn("debugRegenerateToken: email send error:", e?.message || e);
-      }
+      try { await sendVerificationEmail(user.email, token); } catch {}
     }
 
-    return res.json({
-      message: "Token regenerated",
-      email: user.email,
-      token,
-      expiresAt: expires,
-    });
+    return res.json({ message: "Token regenerated", email: user.email, token, expiresAt: expires });
   } catch (e) {
-    console.error("[debugRegenerateToken] error:", e);
     return res.status(500).json({ message: "Server error" });
   }
 };

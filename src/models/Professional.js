@@ -1,5 +1,17 @@
 import mongoose from "mongoose";
 
+const docSchema = new mongoose.Schema({
+  url: { type: String, default: "" },          // /uploads/...
+  fileName: { type: String, default: "" },
+  mimeType: { type: String, default: "" },
+  fileSize: { type: Number, default: 0 },
+  uploadedAt: { type: Date, default: null },
+  expiresAt: { type: Date, default: null },    // solo criminalRecord
+  status: { type: String, enum: ["pending","approved","rejected"], default: "pending" },
+  verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin", default: null },
+}, { _id: false });
+
+
 const professionalSchema = new mongoose.Schema(
   {
     user: {
@@ -67,10 +79,13 @@ const professionalSchema = new mongoose.Schema(
       default: "manual",
     },
 
+    // mantenemos, pero lo sincronizamos desde User.avatarUrl
     avatarUrl: { type: String, default: "" },
+
+    // 👇 NUEVO: estructura con metadatos
     documents: {
-      criminalRecordUrl: { type: String, default: "" },
-      credentialUrl: { type: String, default: "" },
+      criminalRecord: { type: docSchema, default: () => ({}) }, // certificado de antecedentes
+      license: { type: docSchema, default: () => ({}) },        // matrícula/credencial habilitante
     },
   },
   { timestamps: true }
