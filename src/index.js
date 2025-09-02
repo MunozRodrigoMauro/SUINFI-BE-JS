@@ -37,6 +37,8 @@ import { Server as SocketIOServer } from "socket.io";
 // 🆕 JWT para validar (opcional) joinUser
 import jwt from "jsonwebtoken";
 
+import whatsappRoutes from "./routes/whatsapp.routes.js";
+
 dotenv.config();
 
 // Inicialización de app (DEBE IR ANTES de cualquier uso de app)
@@ -201,6 +203,8 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/clients", clientRoutes);
 app.use("/api/admins", adminRoutes);
+app.use("/api/reviews", reviewRoutes);
+app.use("/api/whatsapp", whatsappRoutes);
 
 // Ruta base
 app.get("/", (_req, res) => {

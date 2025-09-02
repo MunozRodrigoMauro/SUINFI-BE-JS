@@ -1,3 +1,4 @@
+// src/controllers/user.controller.js
 import UserModel from "../models/User.js";
 import bcrypt from "bcrypt";
 import ProfessionalModel from "../models/Professional.js";
@@ -7,6 +8,7 @@ import { ensureProfileByRole } from "../services/ensureProfile.js";
 import ClientModel from "../models/Client.js";
 import AdminModel from "../models/Admin.js";
 import path from "path";
+import { normalizePhone } from "../utils/phone.js";
 
 // Crear usuario
 export const createUser = async (req, res) => {
@@ -81,15 +83,23 @@ export const getMe = async (req, res) => {
 
 /** PATCH /api/users/me
  *  Actualiza datos básicos y address; si el user es professional, sincroniza su Professional.
+ *  ➕ Ahora soporta nationality (ISO-2) y whatsapp (con validación/normalización).
  */
 export const updateMe = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Campos permitidos
+    // Leemos el doc actual para usarlo de fallback de región
+    const current = await UserModel.findById(userId).lean();
+    if (!current) return res.status(404).json({ message: "User not found" });
+
+    // Campos permitidos (se agregan whatsapp.* y nationality)
     const allowed = [
       "name",
-      "password", // si tuvieras hashing, aplicalo acá
+      "password",
+      "nationality",
+      "whatsapp.number",
+      "whatsapp.visible",
       "address.country",
       "address.state",
       "address.city",
@@ -122,6 +132,43 @@ export const updateMe = async (req, res) => {
       }
     }
 
+    // Normalizamos nationality a ISO-2 en MAYÚSCULAS (si vino)
+    if (typeof payload.nationality === "string") {
+      payload.nationality = payload.nationality.toUpperCase();
+    }
+
+    // WhatsApp: si vino algún campo, procesamos número
+    if (payload.whatsapp && (("number" in payload.whatsapp) || ("visible" in payload.whatsapp))) {
+      // Región de fallback: prioridad a lo que viene en request
+      const regionFallback =
+        (payload.nationality ||
+          req.body?.address?.country ||
+          current?.nationality ||
+          current?.address?.country ||
+          ""
+        ).toString().toUpperCase();
+
+      if ("number" in payload.whatsapp) {
+        const raw = String(payload.whatsapp.number || "").trim();
+        if (raw) {
+          const norm = normalizePhone(raw, regionFallback);
+          if (!norm) {
+            return res.status(400).json({ message: "INVALID_WHATSAPP_NUMBER" });
+          }
+          payload.whatsapp.number = norm.e164;
+          payload.whatsapp.country = norm.country || regionFallback || "";
+          payload.whatsapp.nationalNumber = norm.nationalNumber || "";
+        } else {
+          // Si envían vacío explícitamente, limpiamos el número
+          payload.whatsapp.number = "";
+          payload.whatsapp.country = "";
+          payload.whatsapp.nationalNumber = "";
+          // Por UX, si se borra el número, ocultamos
+          if (!("visible" in payload.whatsapp)) payload.whatsapp.visible = false;
+        }
+      }
+    }
+
     const updatedUser = await UserModel.findByIdAndUpdate(
       userId,
       { $set: payload },
@@ -130,7 +177,7 @@ export const updateMe = async (req, res) => {
 
     if (!updatedUser) return res.status(404).json({ message: "User not found" });
 
-    // Si es profesional, reflejar address + GeoJSON
+    // Si es profesional, reflejar address + GeoJSON (igual que antes)
     if (updatedUser.role === "professional") {
       const a = updatedUser.address || {};
       const hasCoords =
@@ -158,6 +205,18 @@ export const updateMe = async (req, res) => {
           coordinates: [Number(a.location.lng), Number(a.location.lat)], // [lng, lat]
         };
         proPatch.lastLocationAt = new Date();
+      }
+
+      // Sincronizamos también nationality/whatsapp si se actualizó a nivel usuario (no pisamos si no vinieron)
+      if (typeof payload.nationality === "string") {
+        proPatch.nationality = payload.nationality;
+      }
+      if (payload.whatsapp) {
+        for (const k of ["number", "visible", "country", "nationalNumber"]) {
+          if (payload.whatsapp[k] != null) {
+            proPatch[`whatsapp.${k}`] = payload.whatsapp[k];
+          }
+        }
       }
 
       const pro = await ProfessionalModel.findOneAndUpdate(
@@ -205,8 +264,6 @@ export const getMyProfile = async (req, res) => {
   }
 };
 
-
-
 export const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -216,10 +273,6 @@ export const deleteUser = async (req, res) => {
       ProfessionalModel.deleteOne({ user: id }),
       ClientModel.deleteOne({ user: id }),
       AdminModel.deleteOne?.({ user: id }) ?? Promise.resolve(),
-      // TODO opcional: Conversations.deleteMany({ participants: id })
-      // TODO opcional: Messages.deleteMany({ $or:[{from:id},{to:id}] })
-      // TODO opcional: Bookings.deleteMany({ $or:[{client:id},{professionalUserId:id}] })
-      // TODO opcional: Reviews.deleteMany({ $or:[{user:id},{professionalUser:id}] })
     ]);
 
     await UserModel.findByIdAndDelete(id);
@@ -270,7 +323,7 @@ export const deleteMyAvatar = async (req, res) => {
       userId,
       { 
         $set: { 
-          avatarUrl: null, // o "" dependiendo de tu schema
+          avatarUrl: null,
           updatedAt: new Date()
         } 
       },

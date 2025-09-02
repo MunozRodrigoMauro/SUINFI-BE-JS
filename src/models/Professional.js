@@ -87,6 +87,13 @@ const professionalSchema = new mongoose.Schema(
       criminalRecord: { type: docSchema, default: () => ({}) }, // certificado de antecedentes
       license: { type: docSchema, default: () => ({}) },        // matrícula/credencial habilitante
     },
+    whatsapp: {
+      number: { type: String, default: "" },
+      visible: { type: Boolean, default: false },
+      country: { type: String, default: "" },
+      nationalNumber: { type: String, default: "" }
+    },
+    nationality: { type: String, default: "" },    
   },
   { timestamps: true }
 );

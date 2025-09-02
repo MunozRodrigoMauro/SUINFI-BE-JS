@@ -2,16 +2,28 @@ import express from "express";
 import {
   createReview,
   getMyReviews,
-  getReviewsForProfessional
+  getReviewsForProfessional,
+  getReviewForBooking,
+  getMyPendingReviews,
 } from "../controllers/review.controller.js";
 import { verifyToken } from "../middlewares/auth.middleware.js";
+import { uploadReviewPhotos } from "../middlewares/upload.middleware.js";
 
 const router = express.Router();
-// 📌 Rutas para reviews
-router.post("/", verifyToken, createReview);
-// 📌 Rutas para reviews del usuario
+
+// Crear (con fotos opcionales: campo "photos")
+router.post("/", verifyToken, uploadReviewPhotos.array("photos", 6), createReview);
+
+// Mis reseñas
 router.get("/me", verifyToken, getMyReviews);
-// 📌 Rutas para reviews del profesional
+
+// Existe reseña para un booking (seguridad: dueño del booking)
+router.get("/booking/:id", verifyToken, getReviewForBooking);
+
+// Bookings completados sin reseña (del cliente autenticado)
+router.get("/my-pending", verifyToken, getMyPendingReviews);
+
+// Reviews de un profesional (paginadas)
 router.get("/professional/:id", getReviewsForProfessional);
 
 export default router;

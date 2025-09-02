@@ -4,6 +4,8 @@ import ProfessionalModel from "../models/Professional.js";
 import ServiceModel from "../models/Service.js";
 import isNowWithinSchedule from "../utils/schedule.js";
 import path from "path";
+import fs from "fs"; // <- faltaba para safeUnlinkByUrl
+import { normalizePhone } from "../utils/phone.js";
 
 /* Helpers: siempre devolver SOLO profesionales con user existente y verificado */
 function filterVerifiedWithUser(docs) {
@@ -37,6 +39,45 @@ function docKeyFromType(type) {
   if (type === "license") return "license";
   return null;
 }
+
+// helper seguro para borrar archivo local si existe
+function safeUnlinkByUrl(url = "") {
+  try {
+    if (!url) return;
+    // url viene como "/uploads/docs/<userId>/<file.pdf>"
+    const rel = url.startsWith("/") ? url.slice(1) : url; // quito la barra
+    const abs = path.resolve(process.cwd(), rel);
+    if (fs.existsSync(abs)) fs.unlinkSync(abs);
+  } catch (e) {
+    console.warn("safeUnlinkByUrl:", e.message);
+  }
+}
+
+/** DELETE /api/professionals/me/docs/:type */
+export const deleteMyDocument = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const type = req.params.type;
+    const key = docKeyFromType(type);
+    if (!key) return res.status(400).json({ message: "Tipo de documento inválido" });
+
+    const pro = await ProfessionalModel.findOne({ user: userId });
+    if (!pro) return res.status(404).json({ message: "Professional profile not found" });
+
+    const prev = pro.documents?.[key] || null;
+    if (prev?.url) safeUnlinkByUrl(prev.url);
+
+    // limpiar el campo (dejar objeto vacío para no romper schema)
+    pro.documents = pro.documents || {};
+    pro.documents[key] = {}; // limpio metadatos
+    await pro.save();
+
+    return res.json({ message: "Documento eliminado", documents: pro.documents });
+  } catch (e) {
+    console.error("deleteMyDocument error:", e);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
 
 /* Crear perfil profesional */
 export const createProfessionalProfile = async (req, res) => {
@@ -332,20 +373,65 @@ export const getMyProfessional = async (req, res) => {
 export const updateMyProfessional = async (req, res) => {
   try {
     const userId = req.user.id;
+
+    // Leemos doc actual para fallback de región
+    const current = await ProfessionalModel.findOne({ user: userId });
+    if (!current) return res.status(404).json({ message: "Professional profile not found" });
+
     const allowed = [
       "bio", "phone", "showPhone", "services",
+      "nationality",
+      "whatsapp.number", "whatsapp.visible",
       "address.country","address.state","address.city","address.street","address.number","address.unit","address.postalCode",
       "address.label","address.location",
     ];
 
     const payload = {};
     for (const k of allowed) {
-      const [root, sub] = k.split(".");
-      if (sub) {
+      const [root, sub, sub2] = k.split(".");
+      if (sub && sub2) {
+        if (!payload[root]) payload[root] = {};
+        if (!payload[root][sub]) payload[root][sub] = {};
+        if (req.body?.[root]?.[sub]?.[sub2] != null) payload[root][sub][sub2] = req.body[root][sub][sub2];
+      } else if (sub) {
         if (!payload[root]) payload[root] = {};
         if (req.body?.[root]?.[sub] != null) payload[root][sub] = req.body[root][sub];
       } else if (req.body?.[root] != null) {
         payload[root] = req.body[root];
+      }
+    }
+
+    // Normalizamos nationality
+    if (typeof payload.nationality === "string") {
+      payload.nationality = payload.nationality.toUpperCase();
+    }
+
+    // WhatsApp
+    if (payload.whatsapp && (("number" in payload.whatsapp) || ("visible" in payload.whatsapp))) {
+      const regionFallback =
+        (payload.nationality ||
+          payload?.address?.country ||
+          current?.nationality ||
+          current?.address?.country ||
+          ""
+        ).toString().toUpperCase();
+
+      if ("number" in payload.whatsapp) {
+        const raw = String(payload.whatsapp.number || "").trim();
+        if (raw) {
+          const norm = normalizePhone(raw, regionFallback);
+          if (!norm) {
+            return res.status(400).json({ message: "INVALID_WHATSAPP_NUMBER" });
+          }
+          payload.whatsapp.number = norm.e164;
+          payload.whatsapp.country = norm.country || regionFallback || "";
+          payload.whatsapp.nationalNumber = norm.nationalNumber || "";
+        } else {
+          payload.whatsapp.number = "";
+          payload.whatsapp.country = "";
+          payload.whatsapp.nationalNumber = "";
+          if (!("visible" in payload.whatsapp)) payload.whatsapp.visible = false;
+        }
       }
     }
 

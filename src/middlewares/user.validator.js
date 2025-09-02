@@ -32,3 +32,4 @@ export const userValidationRules = [
     .isIn(["user", "professional", "admin", "client"])
     .withMessage("Invalid role")
 ];
+

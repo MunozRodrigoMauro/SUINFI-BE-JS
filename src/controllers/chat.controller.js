@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
+import Notification from "../models/Notification.js";
+import { notifyChatMessageDeferred } from "../services/notification.service.js";
 
 /**
  * GET /api/chats
@@ -148,6 +150,10 @@ export const createMessage = async (req, res) => {
   io?.to(String(to)).emit("chat:message", { chatId: String(id), message });
   io?.to(String(me)).emit("chat:message", { chatId: String(id), message });
 
+  // 🔔 Notificación diferida por email si el receptor no lee a tiempo
+  const sender = await User.findById(me, "name email").lean();
+  await notifyChatMessageDeferred({ messageDoc: message, sender, recipient: to });
+
   res.status(201).json({ message });
 };
 
@@ -167,6 +173,13 @@ export const markAsRead = async (req, res) => {
     { chat: id, to: me, readAt: null },
     { $set: { readAt: new Date() } }
   );
+
+  // 🧹 Cancela/transforma notifs pendientes de este chat para este usuario
+  await Notification.updateMany(
+    { recipient: me, type: "message", "metadata.chatId": String(id), status: "pending" },
+    { $set: { status: "read", read: true } }
+  );
+
   res.json({ ok: true });
 };
 

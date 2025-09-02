@@ -14,6 +14,7 @@ import {
   updateMyLocation,
   uploadMyDocument,
   getDocsMeta,
+  deleteMyDocument,
 } from "../controllers/professional.controller.js";
 import { verifyToken } from "../middlewares/auth.middleware.js";
 import { patchMyProfessionalRules } from "../middlewares/professional.validator.js";
@@ -44,6 +45,7 @@ router.put("/me", verifyToken, updateMyProfessional);
 router.patch("/me", verifyToken, patchMyProfessionalRules, validateResult, updateMyProfessional);
 
 router.post("/me/docs/:type", verifyToken, uploadDoc, uploadMyDocument); // :type = criminal-record | license
+router.delete("/me/docs/:type", verifyToken, deleteMyDocument); // :type = criminal-record | license
 router.get("/:id/docs/meta", getDocsMeta);
 
 // ⚠️ Dejar "/:id" al final siempre

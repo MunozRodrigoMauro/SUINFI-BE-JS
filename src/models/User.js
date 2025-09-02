@@ -37,6 +37,13 @@ const userSchema = new mongoose.Schema({
   // 🔐 Reset de contraseña
   passwordResetTokenHash: { type: String, index: true, default: null },
   passwordResetExpiresAt: { type: Date, default: null },
+  whatsapp: {
+    number: { type: String, default: "" },      // E.164 (+54...)
+    visible: { type: Boolean, default: false },
+    country: { type: String, default: "" },     // ISO-2
+    nationalNumber: { type: String, default: "" }
+  },
+  nationality: { type: String, default: "" },
 }, { timestamps: true });
 
 // índices útiles

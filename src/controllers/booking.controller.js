@@ -1,12 +1,16 @@
-// ...imports iguales
+// src/controllers/booking.controller.js
 import mongoose from "mongoose";
 import Professional from "../models/Professional.js";
 import Service from "../models/Service.js";
 import Booking from "../models/Booking.js";
-// add: util para parsear date+time
+import { 
+  notifyBookingCreated, 
+  notifyBookingCanceledByClient, 
+  notifyBookingCanceledByPro 
+} from "../services/notification.service.js";
+
 const toISOFromDateTime = (date, time) => {
   if (!date || !time) return null;
-  // Forzamos Z para UTC; si querés zona local, guardá como UTC igual
   const iso = new Date(`${date}T${time}:00.000Z`);
   return isNaN(iso.getTime()) ? null : iso;
 };
@@ -29,13 +33,11 @@ export const createBooking = async (req, res) => {
     const serv = await Service.findById(serviceId);
     if (!serv) return res.status(404).json({ message: "Service no encontrado" });
 
-    // Normalizamos fecha
     const when = scheduledAt ? new Date(scheduledAt) : toISOFromDateTime(date, time);
     if (!when || isNaN(when.getTime())) {
       return res.status(400).json({ message: "Fecha/hora inválidas" });
     }
 
-    // (opcional) prevenir doble booking mismo pro & hora exacta
     const clash = await Booking.findOne({
       professional: prof._id,
       scheduledAt: when,
@@ -58,6 +60,9 @@ export const createBooking = async (req, res) => {
       .populate({ path: "professional", populate: { path: "user", select: "name email avatarUrl" } })
       .populate("service", "name price");
 
+    // 🔔 Email inmediato al profesional por nueva reserva
+    await notifyBookingCreated({ booking: populated });
+
     const io = req.app.get("io");
     io?.emit("booking:created", {
       bookingId: populated._id.toString(),
@@ -73,7 +78,6 @@ export const createBooking = async (req, res) => {
   }
 };
 
-// Listados: agregamos filtros básicos opcionales ?status=&from=&to=
 export const getMyBookings = async (req, res) => {
   try {
     const clientId = req.user.id;
@@ -123,14 +127,13 @@ export const getBookingsForMe = async (req, res) => {
   }
 };
 
-// Transiciones permitidas + validación de rol
 const PROFESSIONAL_ACTIONS = new Set(["accepted", "rejected", "completed"]);
 const CLIENT_ACTIONS = new Set(["canceled"]);
 
 export const updateBookingStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, note } = req.body;
     const me = req.user.id;
 
     if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ message: "Id inválido" });
@@ -138,7 +141,8 @@ export const updateBookingStatus = async (req, res) => {
 
     const booking = await Booking.findById(id)
       .populate({ path: "professional", populate: { path: "user", select: "name email" } })
-      .populate("client", "name email");
+      .populate("client", "name email")
+      .populate("service", "name price");
 
     if (!booking) return res.status(404).json({ message: "Booking no encontrada" });
 
@@ -147,18 +151,34 @@ export const updateBookingStatus = async (req, res) => {
 
     if (PROFESSIONAL_ACTIONS.has(status)) {
       if (me !== professionalUserId) return res.status(403).json({ message: "No autorizado" });
-      // reglas adicionales: no completar si no estaba accepted
       if (status === "completed" && booking.status !== "accepted") {
         return res.status(400).json({ message: "Solo se puede completar una reserva aceptada" });
       }
     } else if (CLIENT_ACTIONS.has(status)) {
       if (me !== clientUserId) return res.status(403).json({ message: "No autorizado" });
+      if (booking.status === "completed") {
+        return res.status(400).json({ message: "No se puede cancelar una reserva completada" });
+      }
+      // ⬇️ registrar metadatos de cancelación
+      booking.cancelNote = typeof note === "string" ? note.trim().slice(0, 500) : "";
+      booking.canceledAt = new Date();
+      booking.canceledBy = me;
     } else {
       return res.status(400).json({ message: "Estado no permitido" });
     }
 
     booking.status = status;
     await booking.save();
+
+    // 🔔 Notificaciones por estado
+    if (CLIENT_ACTIONS.has(status)) {
+      // cliente canceló → mail al profesional
+      await notifyBookingCanceledByClient({ booking });
+    }
+    if (status === "rejected") {
+      // profesional rechazó/canceló → mail al cliente
+      await notifyBookingCanceledByPro({ booking });
+    }
 
     const io = req.app.get("io");
     io?.emit("booking:updated", {

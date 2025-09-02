@@ -17,7 +17,6 @@ const bookingSchema = new mongoose.Schema(
       ref: "Service",
       required: true,
     },
-    // ⇩ antes tenías "date"; el controlador usa "scheduledAt"
     scheduledAt: {
       type: Date,
       required: true,
@@ -37,6 +36,11 @@ const bookingSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+
+    // ⬇️ NUEVO: metadata de cancelación (no rompe nada existente)
+    cancelNote: { type: String, trim: true, default: "" },
+    canceledAt: { type: Date, default: null },
+    canceledBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   },
   { timestamps: true }
 );
