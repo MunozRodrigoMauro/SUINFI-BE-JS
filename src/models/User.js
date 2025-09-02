@@ -44,6 +44,10 @@ const userSchema = new mongoose.Schema({
     nationalNumber: { type: String, default: "" }
   },
   nationality: { type: String, default: "" },
+
+  // 🆕 OAuth
+  googleId: { type: String, index: true, sparse: true, default: null },
+  authProvider: { type: String, enum: ["local", "google"], default: "local" },
 }, { timestamps: true });
 
 // índices útiles

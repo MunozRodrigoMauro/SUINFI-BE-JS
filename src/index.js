@@ -1,5 +1,4 @@
 // src/index.js
-
 import path from "path";
 import fs from "fs";
 // Importamos las dependencias principales
@@ -22,10 +21,13 @@ import notificationRoutes from "./routes/notification.routes.js";
 import paymentRoutes from "./routes/payments.routes.js";
 import clientRoutes from "./routes/client.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
-
+import { debugVerifySmtp } from "./services/mailer.js";
 // Cron + util de agenda
 import cron from "node-cron";
 import isNowWithinSchedule from "./utils/schedule.js";
+
+// 🆕 Cron de notificaciones (email inmediato/diferido)
+import { registerNotificationsCron } from "./utils/notifications-cron.js";
 
 // Modelos
 import ProfessionalModel from "./models/Professional.js";
@@ -41,11 +43,22 @@ import whatsappRoutes from "./routes/whatsapp.routes.js";
 
 dotenv.config();
 
-// Inicialización de app (DEBE IR ANTES de cualquier uso de app)
+// 🆕——— IMPORTS para Google OAuth (no rompen nada) ———
+import UserModel from "./models/User.js";
+import bcrypt from "bcrypt";
+import crypto from "crypto";
+import { ensureProfileByRole } from "./services/ensureProfile.js";
+import {
+  getGoogleAuthURL,
+  getTokens,
+  getGoogleUser,
+} from "./services/googleOAuth.js";
+// ————————————————————————————————————————————————
+
+/* ===== app/cors/static ===== */
 const app = express();
 app.use(express.json());
 
-// CORS para el front local
 app.use(
   cors({
     origin: "http://localhost:5173",
@@ -55,12 +68,11 @@ app.use(
   })
 );
 
-// 📂 Static /uploads (MOVIDO DESPUÉS de inicializar app)
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.resolve("uploads");
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 app.use("/uploads", express.static(UPLOAD_DIR, { maxAge: "1d", index: false }));
 
-// 🚀 HTTP server + Socket.IO
+/* ===== http + socket.io ===== */
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer, {
   cors: {
@@ -73,13 +85,10 @@ const io = new SocketIOServer(httpServer, {
   pingInterval: 25000,
 });
 
-// Hacemos IO accesible desde controladores: req.app.get('io')
 app.set("io", io);
 
-// 🆕 Presencia en memoria (simple)
 const onlineUsers = new Set();
 
-// Helper: verificar JWT de forma segura (opcional)
 function verifyTokenSafe(token) {
   try {
     const secret = process.env.JWT_SECRET || process.env.JWT_KEY || "changeme";
@@ -89,19 +98,9 @@ function verifyTokenSafe(token) {
   }
 }
 
-/* ------------------------------------------------------------------
-   🔊 Socket.IO: rooms por usuario + presencia
-   - joinUser(payload): payload puede ser string userId o { userId, token }
-   - joinRoom / leaveRoom: helpers opcionales por si querés rooms de chat/booking
-   - presence:online/offline para que el FE muestre conectado/desconectado
-   - whoIsOnline: devuelve arreglo con userIds online (dev)
--------------------------------------------------------------------*/
 io.on("connection", (socket) => {
   console.log("🔌 socket conectado:", socket.id);
 
-  // El front puede emitir:
-  // socket.emit("joinUser", userId)  // simple
-  // o: socket.emit("joinUser", { userId, token }) // validando token opcionalmente
   socket.on("joinUser", (payload) => {
     try {
       let userId =
@@ -115,9 +114,7 @@ io.on("connection", (socket) => {
           console.warn("joinUser: token inválido");
           return;
         }
-        // si no mandaron userId, usamos el del token
         if (!userId) userId = decoded.id || decoded._id;
-        // si mandaron ambos y no coinciden, ignoramos
         if ((decoded.id || decoded._id) && userId && (decoded.id || decoded._id) !== userId) {
           console.warn("joinUser: userId no coincide con token");
           return;
@@ -129,14 +126,12 @@ io.on("connection", (socket) => {
       socket.join(userId);
       socket.data.userId = userId;
 
-      // Marcar presencia (si es el primer socket de ese user)
       const room = io.sockets.adapter.rooms.get(userId);
       if (room && room.size === 1) {
         onlineUsers.add(userId);
         io.emit("presence:online", { userId, at: new Date().toISOString() });
       }
 
-      // Ping al propio usuario
       io.to(userId).emit("presence", {
         userId,
         online: true,
@@ -150,7 +145,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // (Opcional) Rooms genéricas (por chatId, bookingId, etc.)
   socket.on("joinRoom", (room) => {
     if (!room) return;
     socket.join(room);
@@ -163,12 +157,10 @@ io.on("connection", (socket) => {
     console.log(`⬅️  ${socket.id} leave -> ${room}`);
   });
 
-  // (Opcional) Debug: listar rooms del socket
   socket.on("debugRooms", () => {
     console.log("Rooms del socket", socket.id, "->", socket.rooms);
   });
 
-  // (Opcional) Obtener lista de userIds online (solo para dev)
   socket.on("whoIsOnline", (cb) => {
     if (typeof cb === "function") cb(Array.from(onlineUsers));
   });
@@ -176,9 +168,8 @@ io.on("connection", (socket) => {
   socket.on("disconnect", (reason) => {
     const userId = socket.data?.userId;
     if (userId) {
-      // si es el último socket en la room, marcar offline
       const room = io.sockets.adapter.rooms.get(userId);
-      const remaining = room ? room.size - 1 : 0; // el actual ya se fue
+      const remaining = room ? room.size - 1 : 0;
       if (remaining <= 0) {
         onlineUsers.delete(userId);
         io.emit("presence:offline", {
@@ -191,7 +182,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// Rutas
+/* ===== rutas existentes ===== */
 app.use("/api/users", userRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/services", serviceRoutes);
@@ -206,7 +197,78 @@ app.use("/api/admins", adminRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
 
-// Ruta base
+/* 🆕 ===== Google OAuth endpoints (redirección y callback) ===== */
+app.get("/api/auth/google", (req, res) => {
+  const next =
+    typeof req.query.next === "string" && req.query.next ? req.query.next : "";
+  const url = getGoogleAuthURL(next);
+  return res.redirect(url);
+});
+
+app.get("/api/auth/google/callback", async (req, res) => {
+  try {
+    const { code, state } = req.query;
+    if (!code) return res.status(400).send("Missing code");
+
+    let next = "/dashboard/user";
+    if (state) {
+      try {
+        const decoded = JSON.parse(Buffer.from(String(state), "base64url").toString());
+        if (decoded?.next && typeof decoded.next === "string") next = decoded.next;
+      } catch {}
+    }
+
+    const { id_token, access_token } = await getTokens({ code });
+    const g = await getGoogleUser(id_token, access_token);
+    const { sub, email, name, picture, email_verified } = g || {};
+
+    if (!email) return res.status(400).send("Google account without email");
+
+    let user = await UserModel.findOne({ email });
+
+    if (!user) {
+      const randomPass = crypto.randomBytes(24).toString("hex");
+      const hashed = await bcrypt.hash(randomPass, 10);
+      user = await UserModel.create({
+        name: name || email.split("@")[0],
+        email,
+        password: hashed,
+        role: "user",
+        verified: true,
+        avatarUrl: picture || "",
+        googleId: sub,
+        authProvider: "google",
+      });
+      await ensureProfileByRole(user);
+    } else {
+      const patch = {};
+      if (!user.googleId && sub) patch.googleId = sub;
+      if (email_verified && !user.verified) patch.verified = true;
+      if (!user.avatarUrl && picture) patch.avatarUrl = picture;
+      if (Object.keys(patch).length) {
+        user = await UserModel.findByIdAndUpdate(user._id, { $set: patch }, { new: true });
+      }
+    }
+
+    const token = jwt.sign(
+      { id: user._id.toString(), role: user.role },
+      process.env.JWT_SECRET || "changeme",
+      { expiresIn: process.env.JWT_EXPIRES_IN || "30d" }
+    );
+
+    const appUrl = process.env.APP_PUBLIC_URL || "http://localhost:5173";
+    const redirectUrl = `${appUrl}/oauth/google/callback?token=${encodeURIComponent(
+      token
+    )}&next=${encodeURIComponent(next)}`;
+    return res.redirect(redirectUrl);
+  } catch (e) {
+    console.error("Google OAuth callback error:", e);
+    return res.status(500).send("Google sign-in failed");
+  }
+});
+/* ===== fin Google OAuth ===== */
+
+/* ===== base route ===== */
 app.get("/", (_req, res) => {
   res.send("Bienvenido a la API de SUINFI 🎯");
 });
@@ -214,10 +276,12 @@ app.get("/", (_req, res) => {
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI;
 
-// Conexión y arranque
 mongoose
   .connect(MONGO_URI)
   .then(() => {
+    registerNotificationsCron();
+    debugVerifySmtp();
+
     httpServer.listen(PORT, () => {
       console.log(`✅ Servidor corriendo en http://localhost:${PORT}`);
     });
@@ -228,13 +292,11 @@ mongoose
 
 /**
  * ⏱️ Cron: sincroniza isAvailableNow con availabilitySchedule cada minuto
- * - Usa updateOne + $set para evitar validaciones de otros campos
- * - Emite "availability:update" por Socket.IO cuando cambie el valor (mismo nombre que el front)
  */
 cron.schedule("* * * * *", async () => {
   try {
     const pros = await ProfessionalModel.find(
-      { availabilityStrategy: "schedule" }, // 👈 solo a los que eligen agenda
+      { availabilityStrategy: "schedule" },
       { _id: 1, user: 1, isAvailableNow: 1, availabilitySchedule: 1 }
     );
 

@@ -159,7 +159,6 @@ export const updateBookingStatus = async (req, res) => {
       if (booking.status === "completed") {
         return res.status(400).json({ message: "No se puede cancelar una reserva completada" });
       }
-      // ⬇️ registrar metadatos de cancelación
       booking.cancelNote = typeof note === "string" ? note.trim().slice(0, 500) : "";
       booking.canceledAt = new Date();
       booking.canceledBy = me;
@@ -167,16 +166,17 @@ export const updateBookingStatus = async (req, res) => {
       return res.status(400).json({ message: "Estado no permitido" });
     }
 
+    // 🔒 Guardar estado previo para decidir notificaciones
+    const prevStatus = booking.status;
+
     booking.status = status;
     await booking.save();
 
-    // 🔔 Notificaciones por estado
-    if (CLIENT_ACTIONS.has(status)) {
-      // cliente canceló → mail al profesional
+    // 🔔 Notificaciones por estado (solo si el pro NO había actuado)
+    if (CLIENT_ACTIONS.has(status) && prevStatus === "pending") {
       await notifyBookingCanceledByClient({ booking });
     }
     if (status === "rejected") {
-      // profesional rechazó/canceló → mail al cliente
       await notifyBookingCanceledByPro({ booking });
     }
 

@@ -48,3 +48,45 @@ export const createNotification = async (req, res) => {
       res.status(500).json({ error: "Server error" });
     }
   };
+
+export const getUnreadCount = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const unread = await NotificationModel.countDocuments({ recipient: userId, read: false });
+    res.json({ unread });
+  } catch (e) {
+    console.error("❌ getUnreadCount:", e);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+export const markAllAsRead = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    await NotificationModel.updateMany(
+      { recipient: userId, read: false },
+      { $set: { read: true, status: "read" } }
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("❌ markAllAsRead:", e);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+export const dispatchNow = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const notif = await NotificationModel.findById(id);
+    if (!notif) return res.status(404).json({ error: "Notificación no encontrada" });
+
+    // Forzar envío inmediato
+    notif.notBefore = new Date(0);
+    await notif.save();
+
+    res.json({ ok: true, forced: true });
+  } catch (e) {
+    console.error("dispatchNow error:", e);
+    res.status(500).json({ error: "Server error" });
+  }
+};

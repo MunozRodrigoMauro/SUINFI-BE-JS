@@ -1,4 +1,3 @@
-// src/services/mailer.no-logo.js
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 
@@ -7,6 +6,8 @@ dotenv.config();
 function getConfig() {
   const {
     SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, APP_PUBLIC_URL,
+    // ➕ nuevos (no rompen nada si no están)
+    SMTP_NO_REPLY, SMTP_SUPPORT, SMTP_FROM_NAME,
   } = process.env;
 
   return {
@@ -16,7 +17,21 @@ function getConfig() {
     SMTP_PASS,
     SMTP_FROM: SMTP_FROM || SMTP_USER || "no-reply@suinfi.com",
     APP_PUBLIC_URL: APP_PUBLIC_URL || "http://localhost:5173",
+    // ➕ nuevos
+    SMTP_NO_REPLY: SMTP_NO_REPLY || "no-reply@suinfi.com",
+    SMTP_SUPPORT: SMTP_SUPPORT || "info@suinfi.com",
+    SMTP_FROM_NAME: SMTP_FROM_NAME || "SUINFI",
   };
+}
+
+// Helper: armar remitente no-reply y Reply-To a soporte
+function buildFrom() {
+  const cfg = getConfig();
+  const email = cfg.SMTP_NO_REPLY || cfg.SMTP_FROM;
+  const name = cfg.SMTP_FROM_NAME || "SUINFI";
+  const from = `"${name}" <${email}>`;
+  const replyTo = cfg.SMTP_SUPPORT ? cfg.SMTP_SUPPORT : undefined;
+  return { from, replyTo };
 }
 
 let transporterPromise = null;
@@ -49,7 +64,9 @@ async function getTransporter() {
 }
 
 export async function sendVerificationEmail(to, token) {
-  const { APP_PUBLIC_URL, SMTP_FROM } = getConfig();
+  const { APP_PUBLIC_URL } = getConfig();
+  const { from, replyTo } = buildFrom();
+
   const link = `${APP_PUBLIC_URL}/verify-email?token=${encodeURIComponent(token)}`;
   const subject = "Confirmá tu correo en SUINFI";
 
@@ -106,13 +123,15 @@ export async function sendVerificationEmail(to, token) {
     return { dev: true };
   }
 
-  const info = await transporter.sendMail({ from: SMTP_FROM, to, subject, text, html });
+  const info = await transporter.sendMail({ from, replyTo, to, subject, text, html });
   console.log("📨 Email enviado:", info?.messageId || "(sin id)");
   return { ok: true, id: info?.messageId };
 }
 
 export async function sendPasswordResetEmail(to, name, token) {
-  const { APP_PUBLIC_URL, SMTP_FROM } = getConfig();
+  const { APP_PUBLIC_URL } = getConfig();
+  const { from, replyTo } = buildFrom();
+
   const link = `${APP_PUBLIC_URL}/reset-password?token=${encodeURIComponent(token)}`;
   const subject = "Restablecer contraseña – SUINFI";
 
@@ -169,7 +188,45 @@ export async function sendPasswordResetEmail(to, name, token) {
     console.log("📧 [DEV] Link:", link);
     return { dev: true };
   }
-  const info = await transporter.sendMail({ from: SMTP_FROM, to, subject, text, html });
+  const info = await transporter.sendMail({ from, replyTo, to, subject, text, html });
   console.log("📨 Reset mail enviado:", info?.messageId || "(sin id)");
   return { ok: true, id: info?.messageId };
+}
+
+/**
+ * Envío genérico de notificaciones por email.
+ * NO altera nada del flujo existente; reutiliza getConfig() y getTransporter().
+ */
+export async function sendNotificationEmail({ to, subject, html, text }) {
+  const transporter = await getTransporter();
+  const { from, replyTo } = buildFrom();
+
+  if (!transporter) {
+    // Modo DEV: no hay SMTP configurado, solo loguea
+    console.log("📧 [DEV][notif] →", to, subject);
+    return { dev: true };
+  }
+  const info = await transporter.sendMail({
+    from,
+    replyTo,
+    to,
+    subject,
+    text: text || "",
+    html: html || `<p>${text || subject || "Notificación"}</p>`,
+  });
+  console.log("📨 Notif mail enviado:", info?.messageId || "(sin id)");
+  return { ok: true, id: info?.messageId };
+}
+
+/**
+ * Helper opcional para verificar SMTP al iniciar.
+ * Útil para ver en consola si Gmail/Host está bien configurado.
+ */
+export async function debugVerifySmtp() {
+  const t = await getTransporter();
+  if (t) {
+    console.log("✅ SMTP listo (verificación OK).");
+  } else {
+    console.log("⚠️ SMTP deshabilitado o credenciales inválidas. Se usarán logs [DEV].");
+  }
 }
