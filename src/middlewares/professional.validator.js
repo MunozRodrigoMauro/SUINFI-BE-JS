@@ -1,9 +1,7 @@
-// src/middlewares/professional.validator.js
 import { body } from "express-validator";
 
-/**
- * 🚫 NO TOCAR: tus reglas originales
- */
+/** (lo que ya tenías)… */
+
 export const patchMyProfessionalRules = [
   body("address").optional().isObject().withMessage("address debe ser un objeto"),
   body("address.country").optional().isString().trim().notEmpty().withMessage("country requerido"),
@@ -13,42 +11,20 @@ export const patchMyProfessionalRules = [
   body("address.postalCode").optional().isString().trim().notEmpty().withMessage("postalCode requerido"),
 ];
 
-/**
- * ✅ Compatibilidad adicional para aceptar address.state sin romper lo existente.
- * Úsalo junto con tus reglas cuando el FE envíe 'state'.
- */
 export const addressStateCompatRules = [
-  body("address.state")
-    .optional()
-    .isString()
-    .trim()
-    .notEmpty()
-    .withMessage("state requerido"),
+  body("address.state").optional().isString().trim().notEmpty().withMessage("state requerido"),
 ];
 
-/**
- * ✅ Reglas opcionales para whatsapp (number + visible)
- * No pisa nada existente; se puede componer en la ruta.
- */
 export const whatsappProfessionalRules = [
   body("whatsapp").optional().isObject().withMessage("whatsapp debe ser un objeto"),
   body("whatsapp.visible").optional().isBoolean().withMessage("whatsapp.visible debe ser boolean"),
   body("whatsapp.number").optional().isString().trim().withMessage("whatsapp.number debe ser string"),
 ];
 
-/**
- * ✅ Nacionalidad como ISO-3166-1 alpha-2 (AR, MX, ES, etc.)
- */
 export const nationalityRule = [
-  body("nationality")
-    .optional()
-    .isISO31661Alpha2()
-    .withMessage("nationality debe ser código ISO-3166-1 alpha-2"),
+  body("nationality").optional().isISO31661Alpha2().withMessage("nationality debe ser código ISO-3166-1 alpha-2"),
 ];
 
-/**
- * ✅ Campos de address opcionales adicionales (no obligan nada)
- */
 export const addressOptionalRules = [
   body("address.city").optional().isString().trim(),
   body("address.unit").optional().isString().trim(),
@@ -57,12 +33,46 @@ export const addressOptionalRules = [
   body("address.location.lng").optional().isFloat().toFloat(),
 ];
 
-/**
- * ✅ Otros campos de perfil profesional que podés validar de forma opcional
- */
 export const professionalUpdateOptionalRules = [
   body("bio").optional().isString(),
   body("services").optional().isArray(),
   body("phone").optional().isString(),
   body("showPhone").optional().isBoolean(),
+];
+
+export const depositRules = [
+  body("depositEnabled").optional().isBoolean().withMessage("depositEnabled debe ser boolean"),
+  body("depositAmount")
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage("depositAmount debe ser un número mayor o igual a 0")
+    .toFloat(),
+];
+
+// NUEVO: reglas para payout (datos bancarios)
+export const payoutRules = [
+  body("payout").isObject().withMessage("payout debe ser un objeto"),
+  body("payout.holderName").optional().isString().trim().isLength({ min: 3 }),
+  body("payout.docType").optional().isIn(["DNI", "CUIT", "CUIL", "PAS", "OTRO"]),
+  body("payout.docNumber").optional().isString().trim().isLength({ min: 6 }),
+  body("payout.bankName").optional().isString().trim(),
+  body("payout.cbu").optional().matches(/^[0-9]{0}|[0-9]{22}$/).withMessage("CBU inválido"),
+  body("payout.alias")
+    .optional()
+    .isString()
+    .trim()
+    .toLowerCase()
+    .matches(/^[a-z0-9_.-]{6,}$/)
+    .withMessage("Alias inválido"),
+];
+
+// Pack “all”
+export const patchMyProfessionalAllRules = [
+  ...patchMyProfessionalRules,
+  ...addressStateCompatRules,
+  ...whatsappProfessionalRules,
+  ...nationalityRule,
+  ...addressOptionalRules,
+  ...professionalUpdateOptionalRules,
+  ...depositRules,
 ];

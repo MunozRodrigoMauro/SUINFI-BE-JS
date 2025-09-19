@@ -37,7 +37,20 @@ const bookingSchema = new mongoose.Schema(
       default: "",
     },
 
-    // ⬇️ NUEVO: metadata de cancelación (no rompe nada existente)
+    // ⚠️ Importante: por default "not_required" para el flujo SIN seña
+    depositPaid: { type: Boolean, default: false },
+    deposit: {
+      status: {
+        type: String,
+        enum: ["not_required", "unpaid", "paid"],
+        default: "not_required",
+      },
+      amount: { type: Number, default: 0 },
+      provider: { type: String, default: null },
+      paymentId: { type: String, default: null },
+      paidAt: { type: Date, default: null },
+    },
+
     cancelNote: { type: String, trim: true, default: "" },
     canceledAt: { type: Date, default: null },
     canceledBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },

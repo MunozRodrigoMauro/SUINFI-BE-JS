@@ -1,197 +1,300 @@
 // src/controllers/booking.controller.js
 import mongoose from "mongoose";
+import Booking from "../models/Booking.js";
 import Professional from "../models/Professional.js";
 import Service from "../models/Service.js";
-import Booking from "../models/Booking.js";
-import { 
-  notifyBookingCreated, 
-  notifyBookingCanceledByClient, 
-  notifyBookingCanceledByPro 
+
+// ✉️ NUEVO: notificaciones por email/cola
+import {
+  notifyBookingCreated,
+  notifyBookingCanceledByClient,
+  notifyBookingCanceledByPro,
 } from "../services/notification.service.js";
 
-const toISOFromDateTime = (date, time) => {
+/* Utils */
+const isValidId = (v) => mongoose.Types.ObjectId.isValid(String(v));
+const toISOZ = (date, time) => {
+  // Espera date: "YYYY-MM-DD" y time: "HH:mm" en horario local del usuario
+  // El FE ya manda así; unificamos a Z para guardar.
   if (!date || !time) return null;
-  const iso = new Date(`${date}T${time}:00.000Z`);
-  return isNaN(iso.getTime()) ? null : iso;
+  return new Date(`${date}T${time}:00.000Z`);
 };
 
+/**
+ * Regla de negocio:
+ * - Si el profesional tiene `depositEnabled = true`, NO permitimos reservar directo aquí.
+ *   El flujo válido es: PreBooking + pago MP → webhook crea Booking.
+ * - Si `depositEnabled = false`, se permite la reserva directa y se marca:
+ *     deposit.status = "not_required"
+ */
 export const createBooking = async (req, res) => {
   try {
-    const clientId = req.user.id;
-    const { professionalId, serviceId, scheduledAt, date, time, note = "", address = "" } = req.body;
+    const me = req.user?.id;
+    if (!me) return res.status(401).json({ message: "No autorizado" });
 
-    if (!professionalId || !serviceId || (!scheduledAt && !(date && time))) {
-      return res.status(400).json({ message: "professionalId, serviceId y scheduledAt (o date+time) son obligatorios" });
+    const {
+      professionalId,
+      serviceId,
+      scheduledAt,
+      date,
+      time,
+      note = "",
+      address = "",
+    } = req.body || {};
+
+    // Validación básica (422 con details.errors para friendly UX en FE)
+    const errors = {};
+    if (!isValidId(professionalId)) errors.professionalId = "Profesional inválido";
+    if (!isValidId(serviceId)) errors.serviceId = "Servicio inválido";
+
+    let when = null;
+    if (scheduledAt) {
+      const d = new Date(scheduledAt);
+      if (isNaN(d.getTime())) errors.scheduledAt = "Fecha/hora inválidas";
+      else when = d;
+    } else {
+      const z = toISOZ(date, time);
+      if (!z || isNaN(z.getTime())) errors.scheduledAt = "Fecha/hora inválidas";
+      else when = z;
     }
-    if (!mongoose.Types.ObjectId.isValid(professionalId) || !mongoose.Types.ObjectId.isValid(serviceId)) {
-      return res.status(400).json({ message: "IDs inválidos" });
+
+    if (Object.keys(errors).length) {
+      return res.status(422).json({ message: "Datos inválidos", errors });
     }
 
-    const prof = await Professional.findById(professionalId).populate("user", "name email");
-    if (!prof) return res.status(404).json({ message: "Professional no encontrado" });
+    // Existencias
+    const pro = await Professional.findById(professionalId)
+      .select("_id depositEnabled user services")
+      .lean();
+    if (!pro) return res.status(404).json({ message: "Profesional no encontrado" });
 
-    const serv = await Service.findById(serviceId);
-    if (!serv) return res.status(404).json({ message: "Service no encontrado" });
+    const svc = await Service.findById(serviceId).select("_id").lean();
+    if (!svc) return res.status(404).json({ message: "Servicio no encontrado" });
 
-    const when = scheduledAt ? new Date(scheduledAt) : toISOFromDateTime(date, time);
-    if (!when || isNaN(when.getTime())) {
-      return res.status(400).json({ message: "Fecha/hora inválidas" });
+    // Guardrail: si requiere seña, esta ruta NO permite crear booking
+    if (pro.depositEnabled === true) {
+      return res
+        .status(409)
+        .json({ message: "Este profesional requiere seña. Iniciá la reserva desde el checkout." });
     }
 
-    const clash = await Booking.findOne({
-      professional: prof._id,
+    // Choque exacto de turno (mismo profesional, mismo horario, reserva activa)
+    const busy = await Booking.exists({
+      professional: professionalId,
       scheduledAt: when,
       status: { $in: ["pending", "accepted"] },
     });
-    if (clash) return res.status(409).json({ message: "El profesional ya tiene una reserva en ese horario" });
+    if (busy) {
+      return res.status(409).json({ message: "Ese horario ya no está disponible." });
+    }
 
-    const booking = await Booking.create({
-      client: clientId,
-      professional: prof._id,
-      service: serv._id,
+    // Doble booking con el mismo profesional (opcional: bloquea si ya tenés una activa)
+    const alreadyWithPro = await Booking.exists({
+      client: me,
+      professional: professionalId,
+      status: { $in: ["pending", "accepted"] },
+    });
+    if (alreadyWithPro) {
+      // El FE ya tiene copy amigable para 409.
+      return res.status(409).json({
+        message:
+          "Ya tenés una reserva pendiente con este profesional. Cancelala desde “Reservas” y volvé a intentarlo.",
+      });
+    }
+
+    // Crear
+    const doc = await Booking.create({
+      client: me,
+      professional: professionalId,
+      service: serviceId,
       scheduledAt: when,
-      note,
-      address,
       status: "pending",
+      note: String(note || "").slice(0, 1000),
+      address: address || "",
+      // ✨ Sin seña
+      depositPaid: false,
+      deposit: {
+        status: "not_required",
+        amount: 0,
+        provider: "",
+        paymentId: null,
+        paidAt: null,
+      },
     });
 
-    const populated = await Booking.findById(booking._id)
-      .populate("client", "name email avatarUrl")
-      .populate({ path: "professional", populate: { path: "user", select: "name email avatarUrl" } })
-      .populate("service", "name price");
+    // Para consistencia, devolvemos populado lo necesario
+    const saved = await Booking.findById(doc._id)
+      .populate({ path: "client", select: "name email" })
+      .populate({
+        path: "professional",
+        populate: { path: "user", select: "name email avatarUrl" },
+      })
+      .populate({ path: "service", select: "name price" });
 
-    // 🔔 Email inmediato al profesional por nueva reserva
-    await notifyBookingCreated({ booking: populated });
+    // ✉️ NUEVO: encolo notificación de “nueva reserva” al profesional
+    try {
+      await notifyBookingCreated({ booking: saved });
+    } catch (e) {
+      console.warn("notifyBookingCreated error:", e?.message || e);
+    }
 
-    const io = req.app.get("io");
-    io?.emit("booking:created", {
-      bookingId: populated._id.toString(),
-      professionalUserId: prof.user?._id?.toString(),
-      clientUserId: clientId,
-      at: new Date().toISOString(),
-    });
+    // 🔌 Opcional (no rompe nada): avisar por Socket.IO a dashboards
+    try {
+      const io = req.app?.get?.("io");
+      io?.emit?.("booking:created", {
+        id: saved._id,
+        status: saved.status,
+        professional: saved?.professional?._id || saved?.professional,
+        client: saved?.client?._id || saved?.client,
+      });
+    } catch (e) {
+      // noop
+    }
 
-    return res.status(201).json(populated);
-  } catch (err) {
-    console.error("createBooking error:", err?.message, err);
-    return res.status(500).json({ message: "Server error", error: err?.message });
+    return res.status(201).json(saved);
+  } catch (e) {
+    console.error("createBooking error:", e?.message || e);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
+/* === Listados usados por el FE (se conservan como los venías usando) === */
+
 export const getMyBookings = async (req, res) => {
   try {
-    const clientId = req.user.id;
-    const { status, from, to } = req.query;
+    const me = req.user?.id;
+    if (!me) return res.status(401).json({ message: "No autorizado" });
+    const { status } = req.query;
 
-    const q = { client: clientId };
+    const q = { client: me };
     if (status) q.status = status;
-    if (from || to) q.scheduledAt = {};
-    if (from) q.scheduledAt.$gte = new Date(from);
-    if (to) q.scheduledAt.$lte = new Date(to);
 
-    const list = await Booking.find(q)
-      .sort({ scheduledAt: -1 })
-      .populate({ path: "professional", populate: { path: "user", select: "name email avatarUrl" } })
+    const items = await Booking.find(q)
+      .sort({ createdAt: -1 })
+      .populate({
+        path: "professional",
+        populate: { path: "user", select: "name email avatarUrl" },
+      })
       .populate("service", "name price");
 
-    res.json(list);
-  } catch (err) {
-    console.error("getMyBookings error:", err);
-    res.status(500).json({ message: "Server error" });
+    return res.json(items);
+  } catch (e) {
+    console.error("getMyBookings error:", e?.message || e);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
 export const getBookingsForMe = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const { status, from, to } = req.query;
+    const me = req.user?.id;
+    if (!me) return res.status(401).json({ message: "No autorizado" });
 
-    const prof = await Professional.findOne({ user: userId });
-    if (!prof) return res.status(404).json({ message: "Professional profile not found" });
+    // Busco el perfil professional del usuario para mapear al campo booking.professional
+    const mine = await Professional.findOne({ user: me }).select("_id").lean();
+    if (!mine) return res.json([]); // no es pro, devuelve vacío
 
-    const q = { professional: prof._id };
+    const { status } = req.query;
+    const q = { professional: mine._id };
     if (status) q.status = status;
-    if (from || to) q.scheduledAt = {};
-    if (from) q.scheduledAt.$gte = new Date(from);
-    if (to) q.scheduledAt.$lte = new Date(to);
 
-    const list = await Booking.find(q)
-      .sort({ scheduledAt: 1 })
-      .populate("client", "name email avatarUrl")
-      .populate("service", "name price");
-
-    res.json(list);
-  } catch (err) {
-    console.error("getBookingsForMe error:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-const PROFESSIONAL_ACTIONS = new Set(["accepted", "rejected", "completed"]);
-const CLIENT_ACTIONS = new Set(["canceled"]);
-
-export const updateBookingStatus = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status, note } = req.body;
-    const me = req.user.id;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ message: "Id inválido" });
-    if (!status) return res.status(400).json({ message: "Estado requerido" });
-
-    const booking = await Booking.findById(id)
-      .populate({ path: "professional", populate: { path: "user", select: "name email" } })
+    const items = await Booking.find(q)
+      .sort({ createdAt: -1 })
       .populate("client", "name email")
       .populate("service", "name price");
 
-    if (!booking) return res.status(404).json({ message: "Booking no encontrada" });
+    return res.json(items);
+  } catch (e) {
+    console.error("getBookingsForMe error:", e?.message || e);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
 
-    const professionalUserId = booking.professional?.user?._id?.toString();
-    const clientUserId = booking.client?._id?.toString();
+/**
+ * PATCH /api/bookings/:id
+ * Cambios de estado mínimos:
+ * - Cliente: puede cancelar (canceled) sus reservas pendientes/aceptadas.
+ * - Profesional: puede aceptar/rechazar y completar.
+ *   (La lógica fina de “canClientCancel / canProComplete” está en el FE; acá validamos lo esencial.)
+ * Admite nota opcional: body.note (string)
+ */
+export const updateBookingStatus = async (req, res) => {
+  try {
+    const me = req.user?.id;
+    if (!me) return res.status(401).json({ message: "No autorizado" });
 
-    if (PROFESSIONAL_ACTIONS.has(status)) {
-      if (me !== professionalUserId) return res.status(403).json({ message: "No autorizado" });
-      if (status === "completed" && booking.status !== "accepted") {
-        return res.status(400).json({ message: "Solo se puede completar una reserva aceptada" });
+    const id = req.params.id;
+    const { status, note } = req.body || {};
+    if (!["accepted", "rejected", "completed", "canceled", "pending"].includes(status || "")) {
+      return res.status(400).json({ message: "Estado inválido" });
+    }
+
+    const bk = await Booking.findById(id)
+      .populate({ path: "professional", select: "user", populate: { path: "user", select: "_id name email" } })
+      .populate("client", "_id name email")
+      .populate("service", "name");
+
+    if (!bk) return res.status(404).json({ message: "Reserva no encontrada" });
+
+    const isClient = String(bk.client?._id) === String(me);
+    const isPro = String(bk?.professional?.user?._id || "") === String(me);
+
+    // Reglas básicas
+    if (status === "canceled") {
+      if (!isClient) return res.status(403).json({ message: "No autorizado" });
+      if (!["pending", "accepted"].includes(bk.status)) {
+        return res.status(400).json({ message: "No se puede cancelar en este estado" });
       }
-    } else if (CLIENT_ACTIONS.has(status)) {
-      if (me !== clientUserId) return res.status(403).json({ message: "No autorizado" });
-      if (booking.status === "completed") {
-        return res.status(400).json({ message: "No se puede cancelar una reserva completada" });
+    } else if (["accepted", "rejected"].includes(status)) {
+      if (!isPro) return res.status(403).json({ message: "No autorizado" });
+      if (bk.status !== "pending") {
+        return res.status(400).json({ message: "La reserva no está pendiente" });
       }
-      booking.cancelNote = typeof note === "string" ? note.trim().slice(0, 500) : "";
-      booking.canceledAt = new Date();
-      booking.canceledBy = me;
-    } else {
-      return res.status(400).json({ message: "Estado no permitido" });
+    } else if (status === "completed") {
+      if (!isPro) return res.status(403).json({ message: "No autorizado" });
+      if (!["accepted"].includes(bk.status)) {
+        return res.status(400).json({ message: "Solo se pueden completar reservas aceptadas" });
+      }
     }
 
-    // 🔒 Guardar estado previo para decidir notificaciones
-    const prevStatus = booking.status;
-
-    booking.status = status;
-    await booking.save();
-
-    // 🔔 Notificaciones por estado (solo si el pro NO había actuado)
-    if (CLIENT_ACTIONS.has(status) && prevStatus === "pending") {
-      await notifyBookingCanceledByClient({ booking });
+    // Aplicar cambios
+    bk.status = status;
+    if (typeof note === "string" && note.trim()) {
+      bk.note = note.trim().slice(0, 1000);
     }
-    if (status === "rejected") {
-      await notifyBookingCanceledByPro({ booking });
+    await bk.save();
+
+    const populated = await Booking.findById(bk._id)
+      .populate({ path: "professional", populate: { path: "user", select: "name email avatarUrl" } })
+      .populate("client", "name email")
+      .populate("service", "name price");
+
+    // ✉️ NUEVO: notificaciones de cancelación (si aplica)
+    try {
+      if (status === "canceled") {
+        if (isClient) {
+          await notifyBookingCanceledByClient({ booking: populated });
+        } else if (isPro) {
+          await notifyBookingCanceledByPro({ booking: populated });
+        }
+      }
+    } catch (e) {
+      console.warn("notifyBookingCanceled* error:", e?.message || e);
     }
 
-    const io = req.app.get("io");
-    io?.emit("booking:updated", {
-      bookingId: booking._id.toString(),
-      status,
-      professionalUserId,
-      clientUserId,
-      at: new Date().toISOString(),
-    });
+    // 🔌 Opcional: evento Socket.IO para refrescar listados
+    try {
+      const io = req.app?.get?.("io");
+      io?.emit?.("booking:updated", {
+        id: populated._id,
+        status: populated.status,
+      });
+    } catch (e) {
+      // noop
+    }
 
-    res.json(booking);
-  } catch (err) {
-    console.error("updateBookingStatus error:", err);
-    res.status(500).json({ message: "Server error" });
+    return res.json(populated);
+  } catch (e) {
+    console.error("updateBookingStatus error:", e?.message || e);
+    return res.status(500).json({ message: "Server error" });
   }
 };

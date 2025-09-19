@@ -1,35 +1,39 @@
 import jwt from "jsonwebtoken";
-import UserModel from "../models/User.js"
+import UserModel from "../models/User.js";
 
-// Middleware para verificar el token JWT
 export const verifyToken = async (req, res, next) => {
   try {
-    // 🔍 Leemos el token del header "Authorization"
-    const authHeader = req.headers.authorization;
-
-    // ⚠️ Si no hay token, denegamos acceso
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    if (!authHeader || !/^Bearer\s+/i.test(authHeader)) {
       return res.status(401).json({ message: "No token provided" });
     }
+    const raw = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const match = raw.match(/[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+/);
+    const token = match ? match[0] : raw;
 
-    // 🧪 Extraemos solo el token (sin el "Bearer ")
-    const token = authHeader.split(" ")[1];
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (e) {
+      console.error("❌ JWT verify error:", e?.message || e);
+      return res.status(401).json({ message: "Invalid or expired token" });
+    }
 
-    // 🔐 Verificamos el token con la clave secreta
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // 🟩 Obtenemos el usuario
-    const user = await UserModel.findById(decoded.id).select("-password")
-    if (!user) return res.status(404).json({ message: "Usuario no encontrado" })
+    const user = await UserModel.findById(decoded.id).select("-password");
+    if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
 
-    // 🔹 Guardamos datos del usuario en req para usarlos en el siguiente middleware/controlador
     req.user = user;
-
-    // 🚀 Continuamos con la siguiente función
     next();
-
   } catch (error) {
     console.error("❌ Error en verificación de token:", error);
     return res.status(401).json({ message: "Invalid or expired token" });
   }
+};
+
+export const requireAdmin = (req, res, next) => {
+  const role = String(req.user?.role || "").toLowerCase();
+  if (role !== "admin") {
+    return res.status(403).json({ message: "Admin only" });
+  }
+  next();
 };

@@ -1,3 +1,4 @@
+// src/services/mailer.js
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 
@@ -5,31 +6,36 @@ dotenv.config();
 
 function getConfig() {
   const {
-    SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, APP_PUBLIC_URL,
-    // ➕ nuevos (no rompen nada si no están)
-    SMTP_NO_REPLY, SMTP_SUPPORT, SMTP_FROM_NAME,
+    SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM,
+    SMTP_NO_REPLY, SMTP_SUPPORT, SMTP_FROM_NAME, SMTP_SECURE,
+    SMTP_REPLY_TO, // por compat
+    APP_PUBLIC_URL,
   } = process.env;
+
+  const portNum = Number(SMTP_PORT || 587);
+  const secureFlag =
+    String(SMTP_SECURE || "").toLowerCase() === "true" || portNum === 465;
 
   return {
     SMTP_HOST,
-    SMTP_PORT: Number(SMTP_PORT || 587),
+    SMTP_PORT: portNum,
     SMTP_USER,
     SMTP_PASS,
-    SMTP_FROM: SMTP_FROM || SMTP_USER || "no-reply@suinfi.com",
-    APP_PUBLIC_URL: APP_PUBLIC_URL || "http://localhost:5173",
-    // ➕ nuevos
-    SMTP_NO_REPLY: SMTP_NO_REPLY || "no-reply@suinfi.com",
-    SMTP_SUPPORT: SMTP_SUPPORT || "info@suinfi.com",
+    SMTP_SECURE: secureFlag,
+    // remitente por defecto: misma casilla SMTP para evitar rechazos del proveedor
+    SMTP_FROM: SMTP_FROM || SMTP_NO_REPLY || SMTP_USER || "no-reply@suinfi.com",
+    SMTP_NO_REPLY: SMTP_NO_REPLY || SMTP_FROM || SMTP_USER || "no-reply@suinfi.com",
+    SMTP_SUPPORT: SMTP_SUPPORT || SMTP_REPLY_TO || "info@suinfi.com",
     SMTP_FROM_NAME: SMTP_FROM_NAME || "SUINFI",
+    APP_PUBLIC_URL: APP_PUBLIC_URL || "http://localhost:5173",
   };
 }
 
-// Helper: armar remitente no-reply y Reply-To a soporte
 function buildFrom() {
   const cfg = getConfig();
-  const email = cfg.SMTP_NO_REPLY || cfg.SMTP_FROM;
+  const fromEmail = cfg.SMTP_NO_REPLY || cfg.SMTP_FROM;
   const name = cfg.SMTP_FROM_NAME || "SUINFI";
-  const from = `"${name}" <${email}>`;
+  const from = `"${name}" <${fromEmail}>`;
   const replyTo = cfg.SMTP_SUPPORT ? cfg.SMTP_SUPPORT : undefined;
   return { from, replyTo };
 }
@@ -40,6 +46,7 @@ async function getTransporter() {
   const cfg = getConfig();
 
   if (!cfg.SMTP_HOST || !cfg.SMTP_USER || !cfg.SMTP_PASS) {
+    console.warn("⚠️ SMTP incompleto: falta host, user o pass → modo DEV.");
     transporterPromise = Promise.resolve(null);
     return transporterPromise;
   }
@@ -48,15 +55,18 @@ async function getTransporter() {
     const t = nodemailer.createTransport({
       host: cfg.SMTP_HOST,
       port: cfg.SMTP_PORT,
-      secure: false,
+      secure: cfg.SMTP_SECURE, // true para 465, false para 587 (STARTTLS)
       auth: { user: cfg.SMTP_USER, pass: cfg.SMTP_PASS },
     });
     try {
       await t.verify();
+      console.log(
+        `✅ SMTP verificado (${cfg.SMTP_HOST}:${cfg.SMTP_PORT} ${cfg.SMTP_SECURE ? "secure" : "starttls"})`
+      );
       return t;
     } catch (e) {
       console.error("❌ SMTP verify failed:", e?.message || e);
-      return null;
+      return null; // fuerza modo DEV
     }
   })();
 
@@ -102,12 +112,6 @@ export async function sendVerificationEmail(to, token) {
             </div>
             <p style="margin:10px 0 0 0;color:#94a3b8;font-size:12px;font-family:system-ui,-apple-system,Segoe UI,Roboto">
               Este enlace expira en 48 horas.
-            </p>
-          </td></tr>
-          <tr><td style="padding:24px 28px 28px 28px">
-            <hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 12px 0"/>
-            <p style="margin:0;color:#94a3b8;font-size:11px;line-height:1.6;font-family:system-ui,-apple-system,Segoe UI,Roboto">
-              Recibiste este mensaje porque creaste una cuenta en SUINFI. Si no fuiste vos, podés ignorarlo.
             </p>
           </td></tr>
         </table>
@@ -170,12 +174,6 @@ export async function sendPasswordResetEmail(to, name, token) {
               <a href="${link}" style="color:#0a0e17;text-decoration:none;font-size:12px;font-family:ui-monospace,monospace">${link}</a>
             </div>
           </td></tr>
-          <tr><td style="padding:24px 28px 28px 28px">
-            <hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 12px 0"/>
-            <p style="margin:0;color:#94a3b8;font-size:11px;line-height:1.6;font-family:system-ui,-apple-system,Segoe UI,Roboto">
-              Si no solicitaste esto, ignorá este correo.
-            </p>
-          </td></tr>
         </table>
         <div style="color:#94a3b8;font-size:11px;margin-top:12px;font-family:system-ui,-apple-system,Segoe UI,Roboto">© ${new Date().getFullYear()} SUINFI</div>
       </td></tr>
@@ -193,16 +191,11 @@ export async function sendPasswordResetEmail(to, name, token) {
   return { ok: true, id: info?.messageId };
 }
 
-/**
- * Envío genérico de notificaciones por email.
- * NO altera nada del flujo existente; reutiliza getConfig() y getTransporter().
- */
 export async function sendNotificationEmail({ to, subject, html, text }) {
   const transporter = await getTransporter();
   const { from, replyTo } = buildFrom();
 
   if (!transporter) {
-    // Modo DEV: no hay SMTP configurado, solo loguea
     console.log("📧 [DEV][notif] →", to, subject);
     return { dev: true };
   }
@@ -218,10 +211,6 @@ export async function sendNotificationEmail({ to, subject, html, text }) {
   return { ok: true, id: info?.messageId };
 }
 
-/**
- * Helper opcional para verificar SMTP al iniciar.
- * Útil para ver en consola si Gmail/Host está bien configurado.
- */
 export async function debugVerifySmtp() {
   const t = await getTransporter();
   if (t) {

@@ -1,28 +1,33 @@
 // src/controllers/professional.controller.js
 import mongoose from "mongoose";
+import path from "path";
+import fs from "fs";
+
 import ProfessionalModel from "../models/Professional.js";
 import ServiceModel from "../models/Service.js";
 import isNowWithinSchedule from "../utils/schedule.js";
-import path from "path";
-import fs from "fs"; // <- faltaba para safeUnlinkByUrl
 import { normalizePhone } from "../utils/phone.js";
 
-/* Helpers: siempre devolver SOLO profesionales con user existente y verificado */
+/* Helpers */
 function filterVerifiedWithUser(docs) {
   return (docs || []).filter((p) => p?.user && p.user?.verified === true);
 }
 
-/* ───────────────────── Normalización de claves de días ───────────────────── */
-const strip = (s = "") => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const strip = (s = "") =>
+  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
 function canonicalDayKey(k = "") {
   const s = strip(k);
   if (s === "miercoles") return "miércoles";
   if (s === "sabado") return "sábado";
-  return s; // domingo,lunes,martes,jueves,viernes ya coinciden
+  return s;
 }
+
 function normalizeSchedule(scheduleLike = {}) {
-  // admite objeto o Map (por si viene de Mongoose)
-  const obj = scheduleLike instanceof Map ? Object.fromEntries(scheduleLike) : scheduleLike || {};
+  const obj =
+    scheduleLike instanceof Map
+      ? Object.fromEntries(scheduleLike)
+      : scheduleLike || {};
   const out = {};
   for (const [k, v] of Object.entries(obj)) {
     const canon = canonicalDayKey(k);
@@ -40,18 +45,20 @@ function docKeyFromType(type) {
   return null;
 }
 
-// helper seguro para borrar archivo local si existe
 function safeUnlinkByUrl(url = "") {
   try {
     if (!url) return;
-    // url viene como "/uploads/docs/<userId>/<file.pdf>"
-    const rel = url.startsWith("/") ? url.slice(1) : url; // quito la barra
+    const rel = url.startsWith("/") ? url.slice(1) : url;
     const abs = path.resolve(process.cwd(), rel);
     if (fs.existsSync(abs)) fs.unlinkSync(abs);
   } catch (e) {
     console.warn("safeUnlinkByUrl:", e.message);
   }
 }
+
+/* Constantes de negocio seña */
+const DEPOSIT_MIN = 2000;
+const DEPOSIT_MAX = 5000;
 
 /** DELETE /api/professionals/me/docs/:type */
 export const deleteMyDocument = async (req, res) => {
@@ -67,9 +74,8 @@ export const deleteMyDocument = async (req, res) => {
     const prev = pro.documents?.[key] || null;
     if (prev?.url) safeUnlinkByUrl(prev.url);
 
-    // limpiar el campo (dejar objeto vacío para no romper schema)
     pro.documents = pro.documents || {};
-    pro.documents[key] = {}; // limpio metadatos
+    pro.documents[key] = {};
     await pro.save();
 
     return res.json({ message: "Documento eliminado", documents: pro.documents });
@@ -79,7 +85,6 @@ export const deleteMyDocument = async (req, res) => {
   }
 };
 
-/* Crear perfil profesional */
 export const createProfessionalProfile = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -90,21 +95,62 @@ export const createProfessionalProfile = async (req, res) => {
     }
 
     const {
-      services, yearsOfExperience, bio,
-      location, isAvailableNow, availabilitySchedule,
-      phone, showPhone, address,
+      services,
+      yearsOfExperience,
+      bio,
+      location,
+      isAvailableNow,
+      availabilitySchedule,
+      phone,
+      showPhone,
+      address,
+      // 🆕 seña
+      depositEnabled,
+      depositAmount,
+      nationality,
+      whatsapp,
     } = req.body;
 
-    const existing = await ProfessionalModel.findOne({ user: userId });
-    if (existing) return res.status(400).json({ message: "Professional profile already exists" });
-
-    // normalizar location {lat,lng} → GeoJSON
+    // Normalizar location
     let loc = location;
     if (loc && typeof loc === "object" && "lat" in loc && "lng" in loc) {
       loc = { type: "Point", coordinates: [Number(loc.lng), Number(loc.lat)] };
     }
     if (!loc || !Array.isArray(loc.coordinates) || loc.coordinates.length !== 2) {
       return res.status(400).json({ message: "Location (lng, lat) es obligatorio" });
+    }
+
+    // Validación de seña
+    const patchDeposit = {};
+    if (typeof depositEnabled === "boolean") patchDeposit.depositEnabled = depositEnabled;
+    if (depositAmount != null) {
+      const n = Math.round(Number(depositAmount));
+      if (!Number.isFinite(n) || n < DEPOSIT_MIN || n > DEPOSIT_MAX) {
+        return res.status(400).json({ message: `depositAmount debe estar entre ${DEPOSIT_MIN} y ${DEPOSIT_MAX}` });
+      }
+      patchDeposit.depositAmount = n;
+    }
+
+    // Normalización de whatsapp
+    let whatsappNormalized = undefined;
+    if (whatsapp && (whatsapp.number || whatsapp.visible != null)) {
+      let countryGuess =
+        (req.body?.nationality || address?.country || nationality || "").toString().toUpperCase();
+      const out = { visible: !!whatsapp.visible };
+      const raw = String(whatsapp.number || "").trim();
+      if (raw) {
+        const norm = normalizePhone(raw, countryGuess);
+        if (!norm) return res.status(400).json({ message: "INVALID_WHATSAPP_NUMBER" });
+        out.number = norm.e164;
+        out.country = norm.country || countryGuess || "";
+        out.nationalNumber = norm.nationalNumber || "";
+      } else {
+        out.number = "";
+        out.country = "";
+        out.nationalNumber = "";
+        out.visible = false;
+      }
+      whatsappNormalized = out;
     }
 
     const profile = new ProfessionalModel({
@@ -118,6 +164,9 @@ export const createProfessionalProfile = async (req, res) => {
       phone,
       showPhone,
       address,
+      nationality,
+      ...(whatsappNormalized ? { whatsapp: whatsappNormalized } : {}),
+      ...patchDeposit,
     });
 
     const saved = await profile.save();
@@ -128,7 +177,6 @@ export const createProfessionalProfile = async (req, res) => {
   }
 };
 
-/* Listado con filtros + paginación */
 export const getProfessionals = async (req, res) => {
   try {
     const { serviceId, categoryId, availableNow, page = 1, limit = 12 } = req.query;
@@ -146,21 +194,25 @@ export const getProfessionals = async (req, res) => {
       else return res.json({ items: [], total: 0, page: 1, pages: 1 });
     }
 
-    if (String(availableNow) === "true") {
-      query.isAvailableNow = true;
-    }
+    if (String(availableNow) === "true") query.isAvailableNow = true;
 
     const pageNum = Math.max(parseInt(page) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit) || 12, 1), 50);
 
-    const [itemsRaw] = await Promise.all([
-      ProfessionalModel.find(query)
-        .populate({ path: "user", select: "name email phone verified avatarUrl", match: { verified: true } })
-        .populate({ path: "services", select: "name price category", populate: { path: "category", select: "name" } })
-        .sort({ isAvailableNow: -1, updatedAt: -1 })
-        .skip((pageNum - 1) * limitNum)
-        .limit(limitNum),
-    ]);
+    const itemsRaw = await ProfessionalModel.find(query)
+      .populate({
+        path: "user",
+        select: "name email phone verified avatarUrl",
+        match: { verified: true },
+      })
+      .populate({
+        path: "services",
+        select: "name price category",
+        populate: { path: "category", select: "name" },
+      })
+      .sort({ isAvailableNow: -1, updatedAt: -1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum);
 
     const items = filterVerifiedWithUser(itemsRaw);
     const total = items.length;
@@ -173,13 +225,20 @@ export const getProfessionals = async (req, res) => {
   }
 };
 
-/* Obtener por ID */
 export const getProfessionalById = async (req, res) => {
   try {
     const { id } = req.params;
     const professional = await ProfessionalModel.findById(id)
-      .populate({ path: "user", select: "name email verified avatarUrl", match: { verified: true } })
-      .populate({ path: "services", select: "name description price category", populate: { path: "category", select: "name" } });
+      .populate({
+        path: "user",
+        select: "name email verified avatarUrl",
+        match: { verified: true },
+      })
+      .populate({
+        path: "services",
+        select: "name description price category",
+        populate: { path: "category", select: "name" },
+      });
 
     if (!professional || !professional.user) {
       return res.status(404).json({ error: "Not found" });
@@ -191,11 +250,11 @@ export const getProfessionalById = async (req, res) => {
   }
 };
 
-/* Cercanos por radio + filtros */
 export const getNearbyProfessionals = async (req, res) => {
   try {
     const { lat, lng, maxDistance = 5000, serviceId, categoryId, availableNow } = req.query;
-    if (!lat || !lng) return res.status(400).json({ error: "Latitude and longitude are required" });
+    if (!lat || !lng)
+      return res.status(400).json({ error: "Latitude and longitude are required" });
 
     const query = {};
     if (String(availableNow) === "true") query.isAvailableNow = true;
@@ -205,7 +264,9 @@ export const getNearbyProfessionals = async (req, res) => {
     }
 
     if (categoryId && mongoose.Types.ObjectId.isValid(categoryId)) {
-      const sIds = await ServiceModel.find({ category: categoryId }, "_id").then(x => x.map(s => s._id));
+      const sIds = await ServiceModel.find({ category: categoryId }, "_id").then((x) =>
+        x.map((s) => s._id)
+      );
       query.services = sIds.length ? { $in: sIds } : "__EMPTY__";
     }
     if (query.services === "__EMPTY__") return res.json([]);
@@ -219,8 +280,16 @@ export const getNearbyProfessionals = async (req, res) => {
         },
       },
     })
-      .populate({ path: "user", select: "name email verified avatarUrl", match: { verified: true } })
-      .populate({ path: "services", select: "name price category", populate: { path: "category", select: "name" } });
+      .populate({
+        path: "user",
+        select: "name email verified avatarUrl",
+        match: { verified: true },
+      })
+      .populate({
+        path: "services",
+        select: "name price category",
+        populate: { path: "category", select: "name" },
+      });
 
     const pros = filterVerifiedWithUser(raw);
     res.json(pros);
@@ -230,19 +299,17 @@ export const getNearbyProfessionals = async (req, res) => {
   }
 };
 
-/* Disponibilidad NOW (manual override temporal) — NO cambia strategy */
 export const updateAvailabilityNow = async (req, res) => {
   try {
     const userId = req.user.id;
     const { isAvailableNow } = req.body;
-
     if (typeof isAvailableNow !== "boolean") {
       return res.status(400).json({ message: "Field 'isAvailableNow' must be a boolean" });
     }
 
     const updated = await ProfessionalModel.findOneAndUpdate(
       { user: userId },
-      { $set: { isAvailableNow } }, // 👈 NO tocamos availabilityStrategy
+      { $set: { isAvailableNow } },
       { new: true }
     ).populate({ path: "user", select: "verified", match: { verified: true } });
 
@@ -268,12 +335,19 @@ export const updateAvailabilityNow = async (req, res) => {
   }
 };
 
-/* Lista de disponibles ahora */
 export const getAvailableNowProfessionals = async (_req, res) => {
   try {
     const raw = await ProfessionalModel.find({ isAvailableNow: true })
-      .populate({ path: "user", select: "name email phone verified avatarUrl", match: { verified: true } })
-      .populate({ path: "services", select: "name price category", populate: { path: "category", select: "name" } })
+      .populate({
+        path: "user",
+        select: "name email phone verified avatarUrl",
+        match: { verified: true },
+      })
+      .populate({
+        path: "services",
+        select: "name price category",
+        populate: { path: "category", select: "name" },
+      })
       .sort({ updatedAt: -1 });
 
     const professionals = filterVerifiedWithUser(raw);
@@ -284,18 +358,14 @@ export const getAvailableNowProfessionals = async (_req, res) => {
   }
 };
 
-/* Agenda semanal */
 export const updateAvailabilitySchedule = async (req, res) => {
   try {
     const userId = req.user.id;
-
-    // 1) Validación básica
     const raw = req.body?.availabilitySchedule;
     if (!raw || typeof raw !== "object") {
       return res.status(400).json({ error: "Invalid availabilitySchedule" });
     }
 
-    // (opcional) validar formato HH:MM
     const re = /^\d{2}:\d{2}$/;
     for (const [day, slot] of Object.entries(raw)) {
       if (!slot?.from || !slot?.to || !re.test(slot.from) || !re.test(slot.to)) {
@@ -303,13 +373,9 @@ export const updateAvailabilitySchedule = async (req, res) => {
       }
     }
 
-    // 2) Normalizar claves (miercoles→miércoles, sabado→sábado, etc.)
     const schedule = normalizeSchedule(raw);
-
-    // 3) Calcular estado actual según agenda
     const shouldBeOn = isNowWithinSchedule(schedule);
 
-    // 4) Guardar: agenda + strategy schedule + sincronizar isAvailableNow
     let saved = await ProfessionalModel.findOneAndUpdate(
       { user: userId },
       {
@@ -319,20 +385,18 @@ export const updateAvailabilitySchedule = async (req, res) => {
           isAvailableNow: shouldBeOn,
         },
       },
-      { new: true }
+      { new: true, runValidators: true } // 👈 asegura min/max etc.
     );
 
     if (!saved) {
       return res.status(404).json({ error: "Professional profile not found" });
     }
 
-    // 5) Responder con POJO de agenda (por si Mongoose la guarda como Map)
     const plain =
       saved.availabilitySchedule instanceof Map
         ? Object.fromEntries(saved.availabilitySchedule)
-        : (saved.availabilitySchedule || {});
+        : saved.availabilitySchedule || {};
 
-    // 6) Notificar al FE
     const io = req.app.get("io");
     io?.emit("availability:update", {
       userId: saved.user.toString(),
@@ -343,7 +407,7 @@ export const updateAvailabilitySchedule = async (req, res) => {
     return res.json({
       message: "Availability updated",
       availabilitySchedule: plain,
-      availabilityStrategy: saved.availabilityStrategy, // "schedule"
+      availabilityStrategy: saved.availabilityStrategy,
       isAvailableNow: saved.isAvailableNow,
     });
   } catch (error) {
@@ -356,98 +420,16 @@ export const updateAvailabilitySchedule = async (req, res) => {
 export const getMyProfessional = async (req, res) => {
   try {
     const userId = req.user.id;
-    const doc = await ProfessionalModel.findOne({ user: userId })
-      .populate({ path: "user", select: "name email verified avatarUrl", match: { verified: true } });
+    const doc = await ProfessionalModel.findOne({ user: userId }).populate({
+      path: "user",
+      select: "name email verified avatarUrl",
+      match: { verified: true },
+    });
 
-    if (!doc || !doc.user) {
-      // 200 sin _id -> el FE ya evalúa !!mine?._id como false
-      return res.json({ exists: false });
-    }
+    if (!doc || !doc.user) return res.json({ exists: false });
     res.json(doc);
   } catch (e) {
     console.error("getMyProfessional error", e);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-export const updateMyProfessional = async (req, res) => {
-  try {
-    const userId = req.user.id;
-
-    // Leemos doc actual para fallback de región
-    const current = await ProfessionalModel.findOne({ user: userId });
-    if (!current) return res.status(404).json({ message: "Professional profile not found" });
-
-    const allowed = [
-      "bio", "phone", "showPhone", "services",
-      "nationality",
-      "whatsapp.number", "whatsapp.visible",
-      "address.country","address.state","address.city","address.street","address.number","address.unit","address.postalCode",
-      "address.label","address.location",
-    ];
-
-    const payload = {};
-    for (const k of allowed) {
-      const [root, sub, sub2] = k.split(".");
-      if (sub && sub2) {
-        if (!payload[root]) payload[root] = {};
-        if (!payload[root][sub]) payload[root][sub] = {};
-        if (req.body?.[root]?.[sub]?.[sub2] != null) payload[root][sub][sub2] = req.body[root][sub][sub2];
-      } else if (sub) {
-        if (!payload[root]) payload[root] = {};
-        if (req.body?.[root]?.[sub] != null) payload[root][sub] = req.body[root][sub];
-      } else if (req.body?.[root] != null) {
-        payload[root] = req.body[root];
-      }
-    }
-
-    // Normalizamos nationality
-    if (typeof payload.nationality === "string") {
-      payload.nationality = payload.nationality.toUpperCase();
-    }
-
-    // WhatsApp
-    if (payload.whatsapp && (("number" in payload.whatsapp) || ("visible" in payload.whatsapp))) {
-      const regionFallback =
-        (payload.nationality ||
-          payload?.address?.country ||
-          current?.nationality ||
-          current?.address?.country ||
-          ""
-        ).toString().toUpperCase();
-
-      if ("number" in payload.whatsapp) {
-        const raw = String(payload.whatsapp.number || "").trim();
-        if (raw) {
-          const norm = normalizePhone(raw, regionFallback);
-          if (!norm) {
-            return res.status(400).json({ message: "INVALID_WHATSAPP_NUMBER" });
-          }
-          payload.whatsapp.number = norm.e164;
-          payload.whatsapp.country = norm.country || regionFallback || "";
-          payload.whatsapp.nationalNumber = norm.nationalNumber || "";
-        } else {
-          payload.whatsapp.number = "";
-          payload.whatsapp.country = "";
-          payload.whatsapp.nationalNumber = "";
-          if (!("visible" in payload.whatsapp)) payload.whatsapp.visible = false;
-        }
-      }
-    }
-
-    const updated = await ProfessionalModel.findOneAndUpdate(
-      { user: userId },
-      { $set: payload },
-      { new: true }
-    ).populate({ path: "user", select: "name email verified", match: { verified: true } });
-
-    if (!updated || !updated.user) {
-      return res.status(404).json({ message: "Professional profile not found" });
-    }
-
-    res.json({ message: "Professional updated", professional: updated });
-  } catch (e) {
-    console.error("updateMyProfessional error", e);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -463,18 +445,24 @@ export const setAvailabilityMode = async (req, res) => {
       { user: userId },
       { $set: { availabilityStrategy: mode } },
       { new: true }
-    ).populate({ path: "user", select: "verified avatarUrl", match: { verified: true } });
+    ).populate({
+      path: "user",
+      select: "verified avatarUrl",
+      match: { verified: true },
+    });
 
     if (!updated || !updated.user) {
       return res.status(404).json({ message: "Professional profile not found" });
     }
-    res.json({ message: "Mode updated", availabilityStrategy: updated.availabilityStrategy });
+    res.json({
+      message: "Mode updated",
+      availabilityStrategy: updated.availabilityStrategy,
+    });
   } catch (e) {
     res.status(500).json({ message: "Server error" });
   }
 };
 
-/* PRO actualiza su posición (en tiempo real) */
 export const updateMyLocation = async (req, res) => {
   try {
     const userId = req.user.id || req.user._id;
@@ -485,7 +473,12 @@ export const updateMyLocation = async (req, res) => {
 
     const pro = await ProfessionalModel.findOneAndUpdate(
       { user: userId },
-      { $set: { location: { type: "Point", coordinates: [lng, lat] }, lastLocationAt: new Date() } },
+      {
+        $set: {
+          location: { type: "Point", coordinates: [lng, lat] },
+          lastLocationAt: new Date(),
+        },
+      },
       { new: true }
     ).populate({ path: "user", select: "verified", match: { verified: true } });
 
@@ -509,7 +502,6 @@ export const updateMyLocation = async (req, res) => {
   }
 };
 
-/** POST /api/professionals/me/docs/:type  (type: criminal-record | license)  multipart: file */
 export const uploadMyDocument = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -540,42 +532,150 @@ export const uploadMyDocument = async (req, res) => {
     pro.documents[key] = { ...(pro.documents[key] || {}), ...meta };
     await pro.save();
 
-    return res.json({
-      message: "Documento actualizado",
-      documents: pro.documents,
-    });
+    return res.json({ message: "Documento actualizado", documents: pro.documents });
   } catch (e) {
     console.error("uploadMyDocument error:", e);
     return res.status(500).json({ message: "Server error" });
   }
 };
 
-/** GET /api/professionals/:id/docs/meta */
 export const getDocsMeta = async (req, res) => {
   try {
-    const pro = await ProfessionalModel.findById(req.params.id)
-      .populate({ path: "user", select: "verified", match: { verified: true } });
+    const pro = await ProfessionalModel.findById(req.params.id).populate({
+      path: "user",
+      select: "verified",
+      match: { verified: true },
+    });
     if (!pro || !pro.user) return res.status(404).json({ message: "Not found" });
 
     const now = Date.now();
     const cr = pro.documents?.criminalRecord || null;
     const lic = pro.documents?.license || null;
 
-    const clean = (d) => d ? ({
-      url: d.url || "",
-      fileName: d.fileName || "",
-      uploadedAt: d.uploadedAt,
-      expiresAt: d.expiresAt,
-      status: d.status || "pending",
-      expired: d.expiresAt ? new Date(d.expiresAt).getTime() < now : false,
-    }) : null;
+    const clean = (d) =>
+      d
+        ? {
+            url: d.url || "",
+            fileName: d.fileName || "",
+            uploadedAt: d.uploadedAt,
+            expiresAt: d.expiresAt,
+            status: d.status || "pending",
+            expired: d.expiresAt ? new Date(d.expiresAt).getTime() < now : false,
+          }
+        : null;
 
-    res.json({
-      criminalRecord: clean(cr),
-      license: clean(lic),
-    });
+    res.json({ criminalRecord: clean(cr), license: clean(lic) });
   } catch (e) {
     console.error("getDocsMeta error:", e);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const updateMyProfessional = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const current = await ProfessionalModel.findOne({ user: userId });
+    if (!current) return res.status(404).json({ message: "Professional profile not found" });
+
+    const allowed = [
+      "bio","phone","showPhone","services","nationality",
+      "whatsapp.number","whatsapp.visible",
+      "address.country","address.state","address.city","address.street","address.number","address.unit","address.postalCode","address.label","address.location",
+      // depósito
+      "depositEnabled","depositAmount",
+      // payout (permitimos update también por /me genérico)
+      "payout.holderName","payout.docType","payout.docNumber","payout.bankName","payout.cbu","payout.alias",
+    ];
+
+    const payload = {};
+    for (const k of allowed) {
+      const [a,b,c] = k.split(".");
+      if (b && c) {
+        if (!payload[a]) payload[a] = {};
+        if (!payload[a][b]) payload[a][b] = {};
+        if (req.body?.[a]?.[b]?.[c] != null) payload[a][b][c] = req.body[a][b][c];
+      } else if (b) {
+        if (!payload[a]) payload[a] = {};
+        if (req.body?.[a]?.[b] != null) payload[a][b] = req.body[a][b];
+      } else if (req.body?.[a] != null) {
+        payload[a] = req.body[a];
+      }
+    }
+
+    if (typeof payload.nationality === "string") {
+      payload.nationality = payload.nationality.toUpperCase();
+    }
+    if ("depositEnabled" in payload) payload.depositEnabled = !!payload.depositEnabled;
+    if ("depositAmount" in payload) {
+      const n = Number(payload.depositAmount);
+      if (!Number.isFinite(n) || n < 0) return res.status(400).json({ message: "depositAmount inválido" });
+      payload.depositAmount = Math.round(n);
+    }
+
+    // Normalización básica de payout
+    if (payload.payout) {
+      if (typeof payload.payout.alias === "string") {
+        payload.payout.alias = payload.payout.alias.trim().toLowerCase();
+      }
+      if (typeof payload.payout.cbu === "string") {
+        payload.payout.cbu = payload.payout.cbu.replace(/\D/g, "");
+      }
+      // si hay alias, podemos permitir cbu vacío; si hay cbu, alias puede ser vacío
+    }
+
+    const updated = await ProfessionalModel.findOneAndUpdate(
+      { user: userId },
+      { $set: payload },
+      { new: true, runValidators: true }
+    ).populate({ path: "user", select: "name email verified", match: { verified: true } });
+
+    if (!updated || !updated.user) return res.status(404).json({ message: "Professional profile not found" });
+
+    res.json({ message: "Professional updated", professional: updated });
+  } catch (e) {
+    console.error("updateMyProfessional error", e);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+/* NUEVO: endpoints dedicados a payout (opcionales, más acotados) */
+export const getMyPayout = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const pro = await ProfessionalModel.findOne({ user: userId }).select("payout");
+    if (!pro) return res.status(404).json({ message: "Professional profile not found" });
+    res.json(pro.payout || {});
+  } catch (e) {
+    console.error("getMyPayout error", e);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const updateMyPayout = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const p = req.body?.payout || {};
+    if (!p || typeof p !== "object") return res.status(400).json({ message: "payout requerido" });
+
+    const patch = {
+      "payout.holderName": p.holderName,
+      "payout.docType": p.docType,
+      "payout.docNumber": p.docNumber,
+      "payout.bankName": p.bankName,
+      "payout.cbu": (p.cbu || "").toString().replace(/\D/g, ""),
+      "payout.alias": (p.alias || "").toString().trim().toLowerCase(),
+    };
+
+    const updated = await ProfessionalModel.findOneAndUpdate(
+      { user: userId },
+      { $set: patch },
+      { new: true, runValidators: true }
+    ).select("payout");
+
+    if (!updated) return res.status(404).json({ message: "Professional profile not found" });
+    res.json({ message: "Payout updated", payout: updated.payout });
+  } catch (e) {
+    console.error("updateMyPayout error", e);
     res.status(500).json({ message: "Server error" });
   }
 };

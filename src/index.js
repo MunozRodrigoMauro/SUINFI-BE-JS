@@ -1,13 +1,11 @@
 // src/index.js
 import path from "path";
 import fs from "fs";
-// Importamos las dependencias principales
 import cors from "cors";
 import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 
-// Rutas
 import userRoutes from "./routes/user.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import serviceRoutes from "./routes/service.routes.js";
@@ -18,32 +16,29 @@ import reviewRoutes from "./routes/review.routes.js";
 import favoritesRoutes from "./routes/favorite.routes.js";
 import chatRoutes from "./routes/chat.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
-import paymentRoutes from "./routes/payments.routes.js";
 import clientRoutes from "./routes/client.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import { debugVerifySmtp } from "./services/mailer.js";
-// Cron + util de agenda
+import paymentRoutes from "./routes/payments.routes.js";
+import startCleanupUnpaidPrebookings from "./scripts/cleanupUnpaidPrebookings.js";
+import startCleanupUnpaid from "./scripts/cleanupUnpaidBookings.js";
+
 import cron from "node-cron";
 import isNowWithinSchedule from "./utils/schedule.js";
 
-// 🆕 Cron de notificaciones (email inmediato/diferido)
 import { registerNotificationsCron } from "./utils/notifications-cron.js";
 
-// Modelos
 import ProfessionalModel from "./models/Professional.js";
 
-// 🔌 HTTP + Socket.IO
 import { createServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 
-// 🆕 JWT para validar (opcional) joinUser
 import jwt from "jsonwebtoken";
 
 import whatsappRoutes from "./routes/whatsapp.routes.js";
 
 dotenv.config();
 
-// 🆕——— IMPORTS para Google OAuth (no rompen nada) ———
 import UserModel from "./models/User.js";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -53,9 +48,7 @@ import {
   getTokens,
   getGoogleUser,
 } from "./services/googleOAuth.js";
-// ————————————————————————————————————————————————
 
-/* ===== app/cors/static ===== */
 const app = express();
 app.use(express.json());
 
@@ -72,7 +65,6 @@ const UPLOAD_DIR = process.env.UPLOAD_DIR || path.resolve("uploads");
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 app.use("/uploads", express.static(UPLOAD_DIR, { maxAge: "1d", index: false }));
 
-/* ===== http + socket.io ===== */
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer, {
   cors: {
@@ -182,7 +174,6 @@ io.on("connection", (socket) => {
   });
 });
 
-/* ===== rutas existentes ===== */
 app.use("/api/users", userRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/services", serviceRoutes);
@@ -191,13 +182,12 @@ app.use("/api/professionals", professionalRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/chats", chatRoutes);
 app.use("/api/notifications", notificationRoutes);
-app.use("/api/payments", paymentRoutes);
 app.use("/api/clients", clientRoutes);
 app.use("/api/admins", adminRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
+app.use("/api/payments", paymentRoutes);
 
-/* 🆕 ===== Google OAuth endpoints (redirección y callback) ===== */
 app.get("/api/auth/google", (req, res) => {
   const next =
     typeof req.query.next === "string" && req.query.next ? req.query.next : "";
@@ -266,9 +256,7 @@ app.get("/api/auth/google/callback", async (req, res) => {
     return res.status(500).send("Google sign-in failed");
   }
 });
-/* ===== fin Google OAuth ===== */
 
-/* ===== base route ===== */
 app.get("/", (_req, res) => {
   res.send("Bienvenido a la API de SUINFI 🎯");
 });
@@ -281,6 +269,8 @@ mongoose
   .then(() => {
     registerNotificationsCron();
     debugVerifySmtp();
+    startCleanupUnpaid();
+    startCleanupUnpaidPrebookings();
 
     httpServer.listen(PORT, () => {
       console.log(`✅ Servidor corriendo en http://localhost:${PORT}`);
@@ -290,9 +280,6 @@ mongoose
     console.error("❌ Error al conectar a Mongo:", err);
   });
 
-/**
- * ⏱️ Cron: sincroniza isAvailableNow con availabilitySchedule cada minuto
- */
 cron.schedule("* * * * *", async () => {
   try {
     const pros = await ProfessionalModel.find(
