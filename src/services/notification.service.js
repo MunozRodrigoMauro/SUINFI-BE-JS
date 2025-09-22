@@ -5,7 +5,7 @@ import Message from "../models/Message.js";
 import { sendNotificationEmail } from "./mailer.js";
 import Booking from "../models/Booking.js";
 
-const APP_NAME = process.env.APP_NAME || "SUINFI";
+const APP_NAME = process.env.APP_NAME || "CuyIT";
 const DELAY_MIN = Number(process.env.NOTIF_EMAIL_DELAY_MINUTES || 5);
 const APP_URL = process.env.APP_PUBLIC_URL || "http://localhost:5173";
 
@@ -23,7 +23,7 @@ function nl2br(s = "") {
 }
 
 /** Misma estética que el mail de verificación */
-function buildBrandedHtml({ title, message, ctaHref, ctaLabel = "Abrir en SUINFI", bodyHtml }) {
+function buildBrandedHtml({ title, message, ctaHref, ctaLabel = "Abrir en CuyIT", bodyHtml }) {
   return `
   <div style="margin:0;padding:0;background:#f7f8fb">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f8fb;padding:24px 0">
@@ -97,7 +97,7 @@ export async function notifyBookingCreated({ booking }) {
   const clientName = booking?.client?.name || "Cliente";
   const serviceName = booking?.service?.name || "Servicio";
 
-  const subject = `Nueva reserva`;
+  const subject = `Nueva Reserva`;
   const message =
     `Cliente: ${clientName}\n` +
     `Tarea: ${serviceName}\n` +
@@ -125,12 +125,13 @@ export async function notifyBookingCanceledByClient({ booking }) {
   const recipient = booking?.professional?.user?._id || booking?.professional?.user;
   if (!recipient) return;
 
-  const subject = `Reserva cancelada`;
+  const subject = `Reserva Cancelada`;
   const whenStr = new Date(booking.scheduledAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" });
   const clientName = booking?.client?.name || "Cliente";
   const serviceName = booking?.service?.name || "Servicio";
-  const cancelReason =
-    (booking?.cancelNote && booking.cancelNote.trim()) ? booking.cancelNote.trim() : "No especificado";
+  const cancelReason = [booking?.cancelNote, booking?.note]
+    .map(v => (typeof v === "string" ? v.trim() : ""))
+    .find(v => !!v) || "No especificado";
 
   const message = `La reserva del ${whenStr} fue cancelada por el cliente. Motivo: ${cancelReason}`;
 
@@ -155,12 +156,12 @@ export async function notifyBookingCanceledByPro({ booking }) {
   const recipient = booking?.client?._id || booking?.client;
   if (!recipient) return;
 
-  const subject = `Reserva cancelada`;
+  const subject = `Reserva Cancelada`;
   const whenStr = new Date(booking.scheduledAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" });
   const professionalName = booking?.professional?.user?.name || "Profesional";
   const serviceName = booking?.service?.name || "Servicio";
 
-  const message = `Tu reserva del ${whenStr} fue cancelada por el profesional.`;
+  const message = `Tu reserva del ${whenStr} fue cancelada por el profesional. Motivo: ${cancelReason}`;
 
   await queueNotification({
     recipient,
@@ -305,7 +306,7 @@ export async function dispatchEmailForNotification(notif) {
     title: notif.subject || `Notificación`,
     message: notif.message,
     ctaHref,
-    ctaLabel: "Abrir en SUINFI",
+    ctaLabel: "Abrir en CuyIT",
     bodyHtml,
   });
 

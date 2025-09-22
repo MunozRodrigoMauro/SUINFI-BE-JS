@@ -9,6 +9,15 @@ export const patchMyProfessionalRules = [
   body("address.street").optional().isString().trim().notEmpty().withMessage("street requerido"),
   body("address.number").optional().isString().trim().notEmpty().withMessage("number requerido"),
   body("address.postalCode").optional().isString().trim().notEmpty().withMessage("postalCode requerido"),
+
+  // ▶️ LINKEDIN: validar URL opcional
+  body("linkedinUrl")
+  .optional()
+  .isString()
+  .trim()
+  .isLength({ max: 300 })
+  .isURL({ require_protocol: true })
+  .withMessage("linkedinUrl debe ser una URL válida con http(s)"),
 ];
 
 export const addressStateCompatRules = [

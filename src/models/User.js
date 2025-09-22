@@ -25,7 +25,14 @@ const emailVerificationSchema = new mongoose.Schema({
 }, { _id: false });
 
 const userSchema = new mongoose.Schema({
-  name:     { type: String, required: true, trim: true },
+  name: {
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: 50,       // <- límite duro
+    minlength: 2,
+    match: [/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' -]+$/u, "Invalid name characters"],
+  },
   email:    { type: String, required: true, unique: true, lowercase: true },
   password: { type: String, required: true, minlength: 6 },
   role:     { type: String, enum: ["user", "professional", "admin"], default: "user" },

@@ -173,7 +173,7 @@ async function notifyDepositAcredited({ bookingId, paymentId, amount }) {
           <tr><td align="center">
             <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;box-shadow:0 6px 24px rgba(16,24,40,.06);border:1px solid #e5e7eb">
               <tr><td style="padding:24px 28px 0 28px;text-align:left">
-                <div style="font-weight:800;font-size:22px;letter-spacing:.5px;font-family:system-ui,-apple-system,Segoe UI,Roboto;color:#1f2a44;">SUINFI</div>
+                <div style="font-weight:800;font-size:22px;letter-spacing:.5px;font-family:system-ui,-apple-system,Segoe UI,Roboto;color:#1f2a44;">CuyIT</div>
               </td></tr>
               <tr><td style="padding:16px 28px 0 28px;text-align:left">
                 <p style="margin:0;color:#0f172a;font-size:16px;font-weight:700;font-family:system-ui,-apple-system,Segoe UI,Roboto">Seña acreditada</p>
@@ -187,7 +187,7 @@ async function notifyDepositAcredited({ bookingId, paymentId, amount }) {
                 </a>
               </td></tr>
             </table>
-            <div style="color:#94a3b8;font-size:11px;margin-top:12px;font-family:system-ui,-apple-system,Segoe UI,Roboto">© ${new Date().getFullYear()} SUINFI</div>
+            <div style="color:#94a3b8;font-size:11px;margin-top:12px;font-family:system-ui,-apple-system,Segoe UI,Roboto">© ${new Date().getFullYear()} CuyIT</div>
           </td></tr>
         </table>
       </div>`;

@@ -223,7 +223,7 @@ export const updateBookingStatus = async (req, res) => {
     if (!me) return res.status(401).json({ message: "No autorizado" });
 
     const id = req.params.id;
-    const { status, note } = req.body || {};
+    const { status, note, cancelNote } = req.body || {};
     if (!["accepted", "rejected", "completed", "canceled", "pending"].includes(status || "")) {
       return res.status(400).json({ message: "Estado inválido" });
     }
@@ -258,8 +258,12 @@ export const updateBookingStatus = async (req, res) => {
 
     // Aplicar cambios
     bk.status = status;
-    if (typeof note === "string" && note.trim()) {
-      bk.note = note.trim().slice(0, 1000);
+    const reason = (cancelNote ?? note ?? "").trim();
+    if (reason) {
+      bk.note = reason.slice(0, 1000);        // si ya lo usás en UI
+      if (status === "canceled" && isClient) {
+        bk.cancelNote = reason.slice(0, 1000); // <- clave para el mail
+      }
     }
     await bk.save();
 

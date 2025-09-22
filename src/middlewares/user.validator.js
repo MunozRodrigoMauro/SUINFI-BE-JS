@@ -5,8 +5,11 @@ import { body } from "express-validator";
 export const userValidationRules = [
   // 📌 Validamos que el nombre no esté vacío
   body("name")
-    .notEmpty()
-    .withMessage("Name is required"),
+    .trim()
+    .notEmpty().withMessage("Name is required")
+    .isLength({ min: 2, max: 50 }).withMessage("Name length 2–50")
+    .matches(/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' -]+$/u).withMessage("Invalid name characters")
+    .customSanitizer(v => capitalizeWords(v)),
 
   // 📌 Validamos que el email sea válido
   body("email")

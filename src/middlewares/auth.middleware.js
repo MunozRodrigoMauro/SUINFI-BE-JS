@@ -23,6 +23,20 @@ export const verifyToken = async (req, res, next) => {
     if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
 
     req.user = user;
+    // 🔔 Marca actividad si es profesional
+    try {
+      if (String(user.role) === "professional") {
+        const Professional = (await import("../models/Professional.js")).default;
+        await Professional.updateOne(
+          { user: user._id },
+            { $set: { lastActivityAt: new Date() } },
+            { timestamps: false }
+          );
+      }
+    } catch (e) {
+      // no rompe auth si falla
+      console.warn("touch lastActivityAt failed:", e?.message || e);
+    }
     next();
   } catch (error) {
     console.error("❌ Error en verificación de token:", error);

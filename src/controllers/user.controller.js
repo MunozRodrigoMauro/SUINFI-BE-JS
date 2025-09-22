@@ -9,12 +9,13 @@ import ClientModel from "../models/Client.js";
 import AdminModel from "../models/Admin.js";
 import path from "path";
 import { normalizePhone } from "../utils/phone.js";
+import { capitalizeWords } from "../utils/capitalizeWords.js";
 
 // Crear usuario
 export const createUser = async (req, res) => {
   try {
     let { name, email, password, role } = req.body;
-
+    name = capitalizeWords(String(name).slice(0, 50));
     // tolera 'client' desde el FE, lo normaliza a 'user'
     if (role === "client") role = "user";
 
@@ -113,6 +114,9 @@ export const updateMe = async (req, res) => {
     ];
 
     const payload = {};
+    if (req.body.name != null) {
+      payload.name = capitalizeWords(String(payload.name).slice(0, 50));
+    }
     for (const key of allowed) {
       const parts = key.split(".");
       let src = req.body;

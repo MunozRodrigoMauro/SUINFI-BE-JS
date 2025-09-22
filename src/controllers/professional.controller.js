@@ -109,6 +109,7 @@ export const createProfessionalProfile = async (req, res) => {
       depositAmount,
       nationality,
       whatsapp,
+      linkedinUrl,
     } = req.body;
 
     // Normalizar location
@@ -167,6 +168,7 @@ export const createProfessionalProfile = async (req, res) => {
       nationality,
       ...(whatsappNormalized ? { whatsapp: whatsappNormalized } : {}),
       ...patchDeposit,
+      ...(linkedinUrl != null ? { linkedinUrl: String(linkedinUrl).trim() } : {}),
     });
 
     const saved = await profile.save();
@@ -307,15 +309,39 @@ export const updateAvailabilityNow = async (req, res) => {
       return res.status(400).json({ message: "Field 'isAvailableNow' must be a boolean" });
     }
 
+    const before = await ProfessionalModel.findOne(
+      { user: userId }, { availabilityStrategy:1, isAvailableNow:1, onlineSince:1, lastActivityAt:1 }
+    ).lean();
+    console.log("[AVAIL PATCH BEFORE]", userId, before);
+
+    const setPatch = {
+      isAvailableNow,
+      lastActivityAt: new Date(),
+      onlineSince: isAvailableNow ? new Date() : null,
+    };
+
+    // ⚖️ Si el usuario estaba en 'schedule', NO cambiamos la estrategia.
+    // Sólo pasamos a 'manual' si antes no era 'schedule'.
+    if (!before || before.availabilityStrategy !== "schedule") {
+      setPatch.availabilityStrategy = "manual";
+    }
+
     const updated = await ProfessionalModel.findOneAndUpdate(
       { user: userId },
-      { $set: { isAvailableNow } },
+      { $set: setPatch },
       { new: true }
     ).populate({ path: "user", select: "verified", match: { verified: true } });
 
     if (!updated || !updated.user) {
       return res.status(404).json({ message: "Professional profile not found" });
     }
+
+    console.log("[AVAIL PATCH OK] userId=%s now=%o", userId, {
+      isAvailableNow: updated.isAvailableNow,
+      onlineSince: updated.onlineSince,
+      lastActivityAt: updated.lastActivityAt,
+      availabilityStrategy: updated.availabilityStrategy,
+    });
 
     const io = req.app.get("io");
     io?.emit("availability:update", {
@@ -351,6 +377,8 @@ export const getAvailableNowProfessionals = async (_req, res) => {
       .sort({ updatedAt: -1 });
 
     const professionals = filterVerifiedWithUser(raw);
+    const ids = professionals.map(p => p.user?._id?.toString()).filter(Boolean);
+    console.log("[GET available-now] count=%d users=%j", ids.length, ids);
     res.json(professionals);
   } catch (error) {
     console.error("❌ Error getting available professionals:", error);
@@ -385,7 +413,7 @@ export const updateAvailabilitySchedule = async (req, res) => {
           isAvailableNow: shouldBeOn,
         },
       },
-      { new: true, runValidators: true } // 👈 asegura min/max etc.
+      { new: true, runValidators: true }
     );
 
     if (!saved) {
@@ -398,11 +426,9 @@ export const updateAvailabilitySchedule = async (req, res) => {
         : saved.availabilitySchedule || {};
 
     const io = req.app.get("io");
-    io?.emit("availability:update", {
-      userId: saved.user.toString(),
-      isAvailableNow: saved.isAvailableNow,
-      at: new Date().toISOString(),
-    });
+    const payload = { userId: saved.user.toString(), isAvailableNow: saved.isAvailableNow, at: new Date().toISOString() };
+    io?.emit("availability:update", payload);
+    io?.to(payload.userId).emit("availability:self", payload);
 
     return res.json({
       message: "Availability updated",
@@ -585,6 +611,7 @@ export const updateMyProfessional = async (req, res) => {
       "depositEnabled","depositAmount",
       // payout (permitimos update también por /me genérico)
       "payout.holderName","payout.docType","payout.docNumber","payout.bankName","payout.cbu","payout.alias",
+      "linkedinUrl",
     ];
 
     const payload = {};
@@ -612,6 +639,11 @@ export const updateMyProfessional = async (req, res) => {
       payload.depositAmount = Math.round(n);
     }
 
+    // ▶️ LINKEDIN: sanitizar string
+    if (typeof payload.linkedinUrl === "string") {
+      payload.linkedinUrl = payload.linkedinUrl.trim();
+    }
+
     // Normalización básica de payout
     if (payload.payout) {
       if (typeof payload.payout.alias === "string") {
@@ -620,7 +652,6 @@ export const updateMyProfessional = async (req, res) => {
       if (typeof payload.payout.cbu === "string") {
         payload.payout.cbu = payload.payout.cbu.replace(/\D/g, "");
       }
-      // si hay alias, podemos permitir cbu vacío; si hay cbu, alias puede ser vacío
     }
 
     const updated = await ProfessionalModel.findOneAndUpdate(

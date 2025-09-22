@@ -7,7 +7,11 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
-    "seed": "node src/seed/seedServicesAndCategories.js"
+    "seed": "node src/seed/seedServicesAndCategories.js",
+    "backfill": "node src/scripts/backfillAvailability.js",
+    "reset:onlineSince": "node src/scripts/resetOnlineSince.js",
+    "check:availability": "node src/scripts/checkAvailabilityState.js",
+    "fix:emptySchedules": "node src/scripts/fixStrategyForEmptySchedule.js"
   },
   "repository": {
     "type": "git",

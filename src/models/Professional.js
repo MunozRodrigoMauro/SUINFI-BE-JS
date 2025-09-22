@@ -80,8 +80,9 @@ const professionalSchema = new mongoose.Schema(
     },
 
     lastLocationAt: { type: Date, default: Date.now },
-
     isAvailableNow: { type: Boolean, default: false },
+    lastActivityAt: { type: Date, default: () => new Date() },
+    onlineSince:    { type: Date, default: null }, // cuándo se puso disponible manualmente
 
     availabilitySchedule: {
       type: Map,
@@ -100,6 +101,17 @@ const professionalSchema = new mongoose.Schema(
     availabilityStrategy: { type: String, enum: ["manual", "schedule"], default: "manual" },
 
     avatarUrl: { type: String, default: "" },
+
+    linkedinUrl: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 300,
+      validate: {
+        validator: (v) => !v || /^https?:\/\/.+/i.test(String(v)),
+        message: "linkedinUrl debe comenzar con http(s)://",
+      },
+    },
 
     documents: {
       criminalRecord: { type: docSchema, default: () => ({}) },
@@ -127,5 +139,6 @@ const professionalSchema = new mongoose.Schema(
 
 // Índice geoespacial
 professionalSchema.index({ location: "2dsphere" });
-
+// Índices sugeridos para cron de inactividad
+professionalSchema.index({ availabilityStrategy: 1, isAvailableNow: 1, lastActivityAt: 1 });
 export default mongoose.model("Professional", professionalSchema);

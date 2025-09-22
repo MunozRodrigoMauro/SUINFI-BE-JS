@@ -1,6 +1,6 @@
-# 🛠️ SUINFI Backend
+# 🛠️ CuyIT Backend
 
-This is the backend for **SUINFI**, a real-time mobile app that connects users with professionals. Built using Node.js, Express, and MongoDB following best practices (MVC, middlewares, validations, JWT auth, etc.).
+This is the backend for **CuyIT**, a real-time mobile app that connects users with professionals. Built using Node.js, Express, and MongoDB following best practices (MVC, middlewares, validations, JWT auth, etc.).
 
 ---
 

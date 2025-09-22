@@ -26,7 +26,7 @@ function getConfig() {
     SMTP_FROM: SMTP_FROM || SMTP_NO_REPLY || SMTP_USER || "no-reply@suinfi.com",
     SMTP_NO_REPLY: SMTP_NO_REPLY || SMTP_FROM || SMTP_USER || "no-reply@suinfi.com",
     SMTP_SUPPORT: SMTP_SUPPORT || SMTP_REPLY_TO || "info@suinfi.com",
-    SMTP_FROM_NAME: SMTP_FROM_NAME || "SUINFI",
+    SMTP_FROM_NAME: SMTP_FROM_NAME || "CuyIT",
     APP_PUBLIC_URL: APP_PUBLIC_URL || "http://localhost:5173",
   };
 }
@@ -34,7 +34,7 @@ function getConfig() {
 function buildFrom() {
   const cfg = getConfig();
   const fromEmail = cfg.SMTP_NO_REPLY || cfg.SMTP_FROM;
-  const name = cfg.SMTP_FROM_NAME || "SUINFI";
+  const name = cfg.SMTP_FROM_NAME || "CuyIT";
   const from = `"${name}" <${fromEmail}>`;
   const replyTo = cfg.SMTP_SUPPORT ? cfg.SMTP_SUPPORT : undefined;
   return { from, replyTo };
@@ -78,7 +78,7 @@ export async function sendVerificationEmail(to, token) {
   const { from, replyTo } = buildFrom();
 
   const link = `${APP_PUBLIC_URL}/verify-email?token=${encodeURIComponent(token)}`;
-  const subject = "Confirmá tu correo en SUINFI";
+  const subject = "Confirmá tu correo en CuyIT";
 
   const text = [
     "Bienvenid@, para activar tu cuenta abrí este enlace:",
@@ -93,7 +93,7 @@ export async function sendVerificationEmail(to, token) {
       <tr><td align="center">
         <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;box-shadow:0 6px 24px rgba(16,24,40,.06);border:1px solid #e5e7eb">
           <tr><td style="padding:24px 28px 0 28px;text-align:left">
-            <div style="font-weight:800;font-size:22px;letter-spacing:.5px;font-family:system-ui,-apple-system,Segoe UI,Roboto;color:#1f2a44;">SUINFI</div>
+            <div style="font-weight:800;font-size:22px;letter-spacing:.5px;font-family:system-ui,-apple-system,Segoe UI,Roboto;color:#1f2a44;">CuyIT</div>
           </td></tr>
           <tr><td style="padding:16px 28px 0 28px;text-align:left">
             <p style="margin:0;color:#475569;font-size:14px;line-height:1.6;font-family:system-ui,-apple-system,Segoe UI,Roboto">Bienvenid@, para activar tu cuenta hacé click en el botón:</p>
@@ -115,7 +115,7 @@ export async function sendVerificationEmail(to, token) {
             </p>
           </td></tr>
         </table>
-        <div style="color:#94a3b8;font-size:11px;margin-top:12px;font-family:system-ui,-apple-system,Segoe UI,Roboto">© ${new Date().getFullYear()} SUINFI</div>
+        <div style="color:#94a3b8;font-size:11px;margin-top:12px;font-family:system-ui,-apple-system,Segoe UI,Roboto">© ${new Date().getFullYear()} CuyIT</div>
       </td></tr>
     </table>
   </div>`;
@@ -137,7 +137,7 @@ export async function sendPasswordResetEmail(to, name, token) {
   const { from, replyTo } = buildFrom();
 
   const link = `${APP_PUBLIC_URL}/reset-password?token=${encodeURIComponent(token)}`;
-  const subject = "Restablecer contraseña – SUINFI";
+  const subject = "Restablecer contraseña – CuyIT";
 
   const text = [
     `Hola ${name || ""},`,
@@ -154,7 +154,7 @@ export async function sendPasswordResetEmail(to, name, token) {
       <tr><td align="center">
         <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;box-shadow:0 6px 24px rgba(16,24,40,.06);border:1px solid #e5e7eb">
           <tr><td style="padding:24px 28px 0 28px;text-align:left">
-            <div style="font-weight:800;font-size:22px;letter-spacing:.5px;font-family:system-ui,-apple-system,Segoe UI,Roboto;color:#1f2a44;">SUINFI</div>
+            <div style="font-weight:800;font-size:22px;letter-spacing:.5px;font-family:system-ui,-apple-system,Segoe UI,Roboto;color:#1f2a44;">CuyIT</div>
           </td></tr>
           <tr><td style="padding:16px 28px 0 28px;text-align:left">
             <p style="margin:0;color:#475569;font-size:14px;line-height:1.6;font-family:system-ui,-apple-system,Segoe UI,Roboto">
@@ -175,7 +175,7 @@ export async function sendPasswordResetEmail(to, name, token) {
             </div>
           </td></tr>
         </table>
-        <div style="color:#94a3b8;font-size:11px;margin-top:12px;font-family:system-ui,-apple-system,Segoe UI,Roboto">© ${new Date().getFullYear()} SUINFI</div>
+        <div style="color:#94a3b8;font-size:11px;margin-top:12px;font-family:system-ui,-apple-system,Segoe UI,Roboto">© ${new Date().getFullYear()} CuyIT</div>
       </td></tr>
     </table>
   </div>`;
