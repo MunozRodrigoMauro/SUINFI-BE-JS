@@ -40,6 +40,7 @@ export const createBooking = async (req, res) => {
       time,
       note = "",
       address = "",
+      isImmediate = false
     } = req.body || {};
 
     // Validación básica (422 con details.errors para friendly UX en FE)
@@ -64,9 +65,13 @@ export const createBooking = async (req, res) => {
 
     // Existencias
     const pro = await Professional.findById(professionalId)
-      .select("_id depositEnabled user services")
+      .select("_id depositEnabled user services isAvailableNow")
       .lean();
     if (!pro) return res.status(404).json({ message: "Profesional no encontrado" });
+
+    if (isImmediate && pro.isAvailableNow !== true) {
+      return res.status(409).json({ message: "El profesional ya no está disponible ahora." });
+    }
 
     const svc = await Service.findById(serviceId).select("_id").lean();
     if (!svc) return res.status(404).json({ message: "Servicio no encontrado" });
@@ -111,6 +116,7 @@ export const createBooking = async (req, res) => {
       status: "pending",
       note: String(note || "").slice(0, 1000),
       address: address || "",
+      isImmediate: !!isImmediate,
       // ✨ Sin seña
       depositPaid: false,
       deposit: {
