@@ -33,6 +33,7 @@ import { Server as SocketIOServer } from "socket.io";
 import jwt from "jsonwebtoken";
 
 import whatsappRoutes from "./routes/whatsapp.routes.js";
+import reportRoutes from "./routes/report.routes.js";
 
 dotenv.config();
 
@@ -207,6 +208,7 @@ app.use("/api/admins", adminRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/reports", reportRoutes);
 
 // Google OAuth (igual que tenías) ...
 app.get("/api/auth/google", (req, res) => {
