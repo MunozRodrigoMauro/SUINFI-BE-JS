@@ -2,6 +2,7 @@ import ReviewModel from "../models/Review.js";
 import BookingModel from "../models/Booking.js";
 import ProfessionalModel from "../models/Professional.js";
 import path from "path";
+import { onReviewBonus } from "../services/points.service.js";
 
 // helper: absolutiza /uploads
 function relUrlFor(file) {
@@ -74,6 +75,15 @@ export const createReview = async (req, res) => {
     });
 
     const stats = await recomputeProfessionalStats(profIdFromBooking);
+
+    try {
+      await onReviewBonus({ bookingId, userId });
+    } catch (e) {
+      // Si ya se otorgó, no es error funcional
+      if (e?.code !== 11000) {
+        console.warn("points.onReviewBonus:", e?.message || e);
+      }
+    }    
 
     return res.status(201).json({ message: "Review creada", review, stats });
   } catch (error) {

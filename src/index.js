@@ -21,7 +21,8 @@ import { debugVerifySmtp } from "./services/mailer.js";
 import paymentRoutes from "./routes/payments.routes.js";
 import startCleanupUnpaidPrebookings from "./scripts/cleanupUnpaidPrebookings.js";
 import startCleanupUnpaid from "./scripts/cleanupUnpaidBookings.js";
-
+import pointsRoutes from "./routes/points.routes.js";
+import rewardsRoutes from "./routes/rewards.routes.js";
 import cron from "node-cron";
 import isNowWithinSchedule from "./utils/schedule.js";
 import { registerNotificationsCron } from "./utils/notifications-cron.js";
@@ -52,7 +53,7 @@ app.use(express.json());
 
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: ["http://localhost:5173", "https://www.cuyit.com"],
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -66,7 +67,7 @@ app.use("/uploads", express.static(UPLOAD_DIR, { maxAge: "1d", index: false }));
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: ["http://localhost:5173", "https://www.cuyit.com"],
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   },
@@ -209,6 +210,8 @@ app.use("/api/reviews", reviewRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/reports", reportRoutes);
+app.use("/api/points", pointsRoutes);
+app.use("/api/rewards", rewardsRoutes);
 
 // Google OAuth (igual que tenías) ...
 app.get("/api/auth/google", (req, res) => {

@@ -1,4 +1,7 @@
 // src/controllers/auth.controller.js
+// (Se mantiene tu lógica local. No agrega rutas Google aquí.)
+// 🛠 CAMBIO: SIN cambios funcionales salvo mantener exactamente tu código.
+
 import UserModel from "../models/User.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
@@ -13,6 +16,7 @@ const hashToken = (t) => crypto.createHash("sha256").update(t).digest("hex");
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
+
     if (!email || !password)
       return res.status(400).json({ message: "Email and password required" });
 
@@ -93,7 +97,10 @@ export const resendVerification = async (req, res) => {
     user.emailVerification = { token, expiresAt: expires };
     await user.save();
 
-    try { await sendVerificationEmail(user.email, token); } catch {}
+    try {
+      await sendVerificationEmail(user.email, token);
+    } catch {}
+
     return res.status(200).json({ message: "Correo de verificación reenviado exitosamente" });
   } catch (e) {
     return res.status(500).json({ message: "Error al reenviar correo de verificación" });
@@ -101,8 +108,7 @@ export const resendVerification = async (req, res) => {
 };
 
 /* ==================== 🔐 Reset de contraseña (público) ==================== */
-
-// POST /api/auth/password-reset/request  { email }
+// POST /api/auth/password-reset/request { email }
 export async function requestPasswordReset(req, res) {
   const { email } = req.body || {};
   // Siempre respondemos 200 (sin filtrar si existe o no)
@@ -113,7 +119,6 @@ export async function requestPasswordReset(req, res) {
       user.passwordResetTokenHash = hashToken(rawToken);
       user.passwordResetExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
       await user.save();
-
       try {
         await sendPasswordResetEmail(user.email, user.name || user.email, rawToken);
       } catch (e) {
@@ -126,7 +131,7 @@ export async function requestPasswordReset(req, res) {
   }
 }
 
-// POST /api/auth/password-reset/confirm  { token, newPassword }
+// POST /api/auth/password-reset/confirm { token, newPassword }
 export async function confirmPasswordReset(req, res) {
   const { token, newPassword } = req.body || {};
   if (!token || !newPassword) return res.status(400).json({ message: "Datos inválidos" });
@@ -148,6 +153,7 @@ export async function confirmPasswordReset(req, res) {
 
   const tokenHash = hashToken(token);
   const now = new Date();
+
   const user = await UserModel.findOne({
     passwordResetTokenHash: tokenHash,
     passwordResetExpiresAt: { $gt: now },
@@ -171,7 +177,6 @@ export const debugGetUserByEmail = async (req, res) => {
     if (!email) return res.status(400).json({ message: "Missing email" });
     const user = await UserModel.findOne({ email }).lean();
     if (!user) return res.status(404).json({ message: "User not found" });
-
     return res.json({
       id: user._id,
       email: user.email,
@@ -189,7 +194,6 @@ export const debugRegenerateToken = async (req, res) => {
   try {
     const { email, send = "false" } = req.body || {};
     if (!email) return res.status(400).json({ message: "Missing email" });
-
     const user = await UserModel.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
 
@@ -199,10 +203,17 @@ export const debugRegenerateToken = async (req, res) => {
     await user.save();
 
     if (String(send).toLowerCase() === "true") {
-      try { await sendVerificationEmail(user.email, token); } catch {}
+      try {
+        await sendVerificationEmail(user.email, token);
+      } catch {}
     }
 
-    return res.json({ message: "Token regenerated", email: user.email, token, expiresAt: expires });
+    return res.json({
+      message: "Token regenerated",
+      email: user.email,
+      token,
+      expiresAt: expires,
+    });
   } catch (e) {
     return res.status(500).json({ message: "Server error" });
   }

@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import Booking from "../models/Booking.js";
 import Professional from "../models/Professional.js";
 import Service from "../models/Service.js";
-
+import { onBookingCompleted } from "../services/points.service.js";
 // ✉️ NUEVO: notificaciones por email/cola
 import {
   notifyBookingCreated,
@@ -277,6 +277,15 @@ export const updateBookingStatus = async (req, res) => {
       .populate({ path: "professional", populate: { path: "user", select: "name email avatarUrl" } })
       .populate("client", "name email")
       .populate("service", "name price");
+
+    // 🔸 Acreditación de puntos al completar
+    if (status === "completed") {
+      try {
+        await onBookingCompleted({ booking: populated });
+      } catch (e) {
+        console.warn("points.onBookingCompleted:", e?.message || e);
+      }
+    }
 
     // ✉️ NUEVO: notificaciones de cancelación (si aplica)
     try {

@@ -19,7 +19,7 @@ importers:
         version: 2.8.5
       dotenv:
         specifier: ^17.2.1
-        version: 17.2.2
+        version: 17.2.3
       express:
         specifier: ^5.1.0
         version: 5.1.0
@@ -31,16 +31,16 @@ importers:
         version: 9.0.2
       libphonenumber-js:
         specifier: ^1.12.15
-        version: 1.12.15
+        version: 1.12.23
       maplibre-gl:
         specifier: ^5.6.2
-        version: 5.7.1
+        version: 5.7.3
       mercadopago:
         specifier: ^2.8.0
-        version: 2.8.0
+        version: 2.9.0
       mongoose:
         specifier: ^8.16.4
-        version: 8.18.1
+        version: 8.18.3
       multer:
         specifier: ^2.0.2
         version: 2.0.2
@@ -91,15 +91,15 @@ packages:
     resolution: {integrity: sha512-Es6WcD0nO5l+2BOQS4uLfNPYQaNDfbot3X1XUoloz+x0mPDS3eeORZJl06HXjwBG1fOGwCRnzK88LMdxKRrd6Q==}
     engines: {node: '>=6.0.0'}
 
-  '@maplibre/maplibre-gl-style-spec@23.3.0':
-    resolution: {integrity: sha512-IGJtuBbaGzOUgODdBRg66p8stnwj9iDXkgbYKoYcNiiQmaez5WVRfXm4b03MCDwmZyX93csbfHFWEJJYHnn5oA==}
+  '@maplibre/maplibre-gl-style-spec@24.2.0':
+    resolution: {integrity: sha512-cE80g83fRcBbZbQC70siOUxUK6YJ/5ZkClDZbmm+hzrUbv+J6yntkMmcpdz9DbOrWOM7FHKR5rruc6Q/hWx5cA==}
     hasBin: true
 
   '@maplibre/vt-pbf@4.0.3':
     resolution: {integrity: sha512-YsW99BwnT+ukJRkseBcLuZHfITB4puJoxnqPVjo72rhW/TaawVYsgQHcqWLzTxqknttYoDpgyERzWSa/XrETdA==}
 
-  '@mongodb-js/saslprep@1.3.0':
-    resolution: {integrity: sha512-zlayKCsIjYb7/IdfqxorK5+xUMyi4vOKcFy10wKJYc63NSdKI8mNME+uJqfatkPmOSMMUiojrL58IePKBm3gvQ==}
+  '@mongodb-js/saslprep@1.3.1':
+    resolution: {integrity: sha512-6nZrq5kfAz0POWyhljnbWQQJQ5uT8oE2ddX303q1uY0tWsivWKgBDXBBvuFPwOqRRalXJuVO9EjOdVtuhLX0zg==}
 
   '@socket.io/component-emitter@3.1.2':
     resolution: {integrity: sha512-9BCxFwvbGg/RsZK9tjXd8s4UcwR0MWeFQ1XEKIQVVvAGJyINdrqKMcTRyLoK8Rse1GjzLV9cwjWV1olXRWEXVA==}
@@ -113,8 +113,8 @@ packages:
   '@types/geojson@7946.0.16':
     resolution: {integrity: sha512-6C8nqWur3j98U6+lXDfTUWIfgvZU+EumvpHKcYjujKH7woYyLj2sUmff0tRhrqM7BohUw7Pz3ZB1jj2gW9Fvmg==}
 
-  '@types/node@24.3.1':
-    resolution: {integrity: sha512-3vXmQDXy+woz+gnrTvuvNrPzekOi+Ds0ReMxw0LzBiK3a+1k0kQn9f2NWk+lgD4rJehFUmYy2gMhJ2ZI+7YP9g==}
+  '@types/node@24.6.0':
+    resolution: {integrity: sha512-F1CBxgqwOMc4GKJ7eY22hWhBVQuMYTtqI8L0FcszYcpYX0fzfDGpez22Xau8Mgm7O9fI+zA/TYIdq3tGWfweBA==}
 
   '@types/supercluster@7.1.3':
     resolution: {integrity: sha512-Z0pOY34GDFl3Q6hUFYf3HkTwKEE02e7QgtJppBt+beEAxnyOpJua+voGFvxINBHa06GwLFFym7gRPY2SiKIfIA==}
@@ -139,6 +139,14 @@ packages:
 
   append-field@1.0.0:
     resolution: {integrity: sha512-klpgFSWLW1ZEs8svjfb7g4qWY0YS5imI82dTg+QahUvJ8YqAY0P10Uk8tTyh9ZGuYEZEMaeJYCF5BFuX552hsw==}
+
+  async-function@1.0.0:
+    resolution: {integrity: sha512-hsU18Ae8CDTR6Kgu9DYf0EbCr/a5iGL0rytQDobUcdpYOKokk8LEjVphnXkDkgpi0wYVsqrXuP0bZxJaTqdgoA==}
+    engines: {node: '>= 0.4'}
+
+  async-generator-function@1.0.0:
+    resolution: {integrity: sha512-+NAXNqgCrB95ya4Sr66i1CL2hqLVckAk7xwRYWdcm39/ELQ6YNn1aw5r0bdQtqNZgQpEWzc5yc/igXc7aL5SLA==}
+    engines: {node: '>= 0.4'}
 
   balanced-match@1.0.2:
     resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
@@ -232,8 +240,8 @@ packages:
       supports-color:
         optional: true
 
-  debug@4.4.1:
-    resolution: {integrity: sha512-KcKCqiftBJcZr++7ykoDIEwSa3XWowTfNPo92BYxjXiyYEVrUQh2aLyhxBCwww+heortUFxEJYcRzosstTEBYQ==}
+  debug@4.4.3:
+    resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
     engines: {node: '>=6.0'}
     peerDependencies:
       supports-color: '*'
@@ -245,8 +253,8 @@ packages:
     resolution: {integrity: sha512-g7nH6P6dyDioJogAAGprGpCtVImJhpPk/roCzdb3fIh61/s/nPsfR6onyMwkCAR/OlC3yBC0lESvUoQEAssIrw==}
     engines: {node: '>= 0.8'}
 
-  dotenv@17.2.2:
-    resolution: {integrity: sha512-Sf2LSQP+bOlhKWWyhFsn0UsfdK/kCWRv1iuA2gXAwt3dyNabr6QSj00I2V10pidqz69soatm9ZwZvpQMTIOd5Q==}
+  dotenv@17.2.3:
+    resolution: {integrity: sha512-JVUnt+DUIzu87TABbhPmNfVdBDt18BLOWjMUFJMSi/Qqg7NTYtabbvSNJGOJ7afbRuv9D/lngizHtP7QyLQ+9w==}
     engines: {node: '>=12'}
 
   dunder-proto@1.0.1:
@@ -328,11 +336,15 @@ packages:
   function-bind@1.1.2:
     resolution: {integrity: sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==}
 
+  generator-function@2.0.0:
+    resolution: {integrity: sha512-xPypGGincdfyl/AiSGa7GjXLkvld9V7GjZlowup9SHIJnQnHLFiLODCd/DqKOp0PBagbHJ68r1KJI9Mut7m4sA==}
+    engines: {node: '>= 0.4'}
+
   geojson-vt@4.0.2:
     resolution: {integrity: sha512-AV9ROqlNqoZEIJGfm1ncNjEXfkz2hdFlZf0qkVfmkwdKa8vj7H16YUOT81rJw1rdFhyEDlN2Tds91p/glzbl5A==}
 
-  get-intrinsic@1.3.0:
-    resolution: {integrity: sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ==}
+  get-intrinsic@1.3.1:
+    resolution: {integrity: sha512-fk1ZVEeOX9hVZ6QzoBNEC55+Ucqg4sTVwrVuigZhuRPESVFpMyXnd3sbXvPOwp7Y9riVyANiqhEuRF0G1aVSeQ==}
     engines: {node: '>= 0.4'}
 
   get-proto@1.0.1:
@@ -427,8 +439,8 @@ packages:
   kdbush@4.0.2:
     resolution: {integrity: sha512-WbCVYJ27Sz8zi9Q7Q0xHC+05iwkm3Znipc2XTlrnJbsHMYktW4hPhXUE8Ys1engBrvffoSCqbil1JQAa7clRpA==}
 
-  libphonenumber-js@1.12.15:
-    resolution: {integrity: sha512-TMDCtIhWUDHh91wRC+wFuGlIzKdPzaTUHHVrIZ3vPUEoNaXFLrsIQ1ZpAeZeXApIF6rvDksMTvjrIQlLKaYxqQ==}
+  libphonenumber-js@1.12.23:
+    resolution: {integrity: sha512-RN3q3gImZ91BvRDYjWp7ICz3gRn81mW5L4SW+2afzNCC0I/nkXstBgZThQGTE3S/9q5J90FH4dP+TXx8NhdZKg==}
 
   lodash.includes@4.3.0:
     resolution: {integrity: sha512-W3Bx6mdkRTGtlJISOvVD/lbqjTlPPUDTMnlXZFnVwi9NKJ6tiAk6LVdlhZMm17VZisqhKcgzpO5Wz91PCt5b0w==}
@@ -454,8 +466,8 @@ packages:
   lodash@4.17.21:
     resolution: {integrity: sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==}
 
-  maplibre-gl@5.7.1:
-    resolution: {integrity: sha512-iCOQB6W/EGgQx8aU4SyfU5a5/GR2E+ELF92NMsqYfs3x+vnY+8mARmz4gor6XZHCz3tv19mnotVDRlRTMNKyGw==}
+  maplibre-gl@5.7.3:
+    resolution: {integrity: sha512-T6XsjwcSfOr0vtAt4GTzx4m/vD6nrbR0+61MgMzZ9REQwILSEnhqwNpFuFbDedX6LC3ZWjZWnxN7fN/I66WoDQ==}
     engines: {node: '>=16.14.0', npm: '>=8.1.0'}
 
   math-intrinsics@1.1.0:
@@ -473,8 +485,8 @@ packages:
   memory-pager@1.5.0:
     resolution: {integrity: sha512-ZS4Bp4r/Zoeq6+NLJpP+0Zzm0pR8whtGPf1XExKLJBAczGMnSi3It14OiNCStjQjM6NU1okjQGSxgEZN8eBYKg==}
 
-  mercadopago@2.8.0:
-    resolution: {integrity: sha512-TInH/yGB1JqWaJv41Ske75ryqsN1ffTPMThSTEpt+sDsFDAG8ecahTLw41Az1VuL0gwa+qOHp9SfTyU27Smwew==}
+  mercadopago@2.9.0:
+    resolution: {integrity: sha512-C7iqIxeDjlSVmvNSJlTbzlxmNkOxPG0g9iQyIA03T05Y+AK8bIwRZ0Nr/VDmGyhSov76y1oOP0ZuDafs9c8B5Q==}
 
   merge-descriptors@2.0.0:
     resolution: {integrity: sha512-Snk314V5ayFLhp3fkUREub6WtjBfPdCPY1Ln8/8munuLuiYhsABgBVWsozAG+MWMbVEvcdcpbi9R7ww22l9Q3g==}
@@ -536,8 +548,8 @@ packages:
       socks:
         optional: true
 
-  mongoose@8.18.1:
-    resolution: {integrity: sha512-K0RfrUXXufqNRZZjvAGdyjydB91SnbWxlwFYi5t7zN2DxVWFD3c6puia0/7xfBwZm6RCpYOVdYFlRFpoDWiC+w==}
+  mongoose@8.18.3:
+    resolution: {integrity: sha512-5kuHl9IYD19xItCBKl0gtp7WKRH0X9Vm95pSRUml/Qv6uYAqDvGvKqEufluIBNextU22nB7w67N+UTmQxDA3RQ==}
     engines: {node: '>=16.20.1'}
 
   mpath@0.9.0:
@@ -801,8 +813,8 @@ packages:
   undefsafe@2.0.5:
     resolution: {integrity: sha512-WxONCrssBM8TSPRqN5EmsjVrsv4A8X12J4ArBiiayv3DyyG3ZlIg6yysuuSYdZsVz3TKcTg2fd//Ujd4CHV1iA==}
 
-  undici-types@7.10.0:
-    resolution: {integrity: sha512-t5Fy/nfn+14LuOc2KNYg75vZqClpAiqscVvMygNnlsHBFpSXdJaYtXMcdNLpl/Qvc3P2cB3s6lOV51nqsFq4ag==}
+  undici-types@7.13.0:
+    resolution: {integrity: sha512-Ov2Rr9Sx+fRgagJ5AX0qvItZG/JKKoBRAVITs1zk7IqZGTJUwgUr7qoYBpWwakpWilTZFM98rG/AFRocu10iIQ==}
 
   unpipe@1.0.0:
     resolution: {integrity: sha512-pjy2bYhSsufwWlKwPc+l3cN7+wuJlK6uz0YdJEOlQDbl6jo/YlPi4mb8agUkVC8BF7V8NuzeyPNqRksA3hztKQ==}
@@ -885,7 +897,7 @@ snapshots:
 
   '@mapbox/whoots-js@3.1.0': {}
 
-  '@maplibre/maplibre-gl-style-spec@23.3.0':
+  '@maplibre/maplibre-gl-style-spec@24.2.0':
     dependencies:
       '@mapbox/jsonlint-lines-primitives': 2.0.2
       '@mapbox/unitbezier': 0.0.1
@@ -905,7 +917,7 @@ snapshots:
       pbf: 4.0.1
       supercluster: 8.0.1
 
-  '@mongodb-js/saslprep@1.3.0':
+  '@mongodb-js/saslprep@1.3.1':
     dependencies:
       sparse-bitfield: 3.0.3
 
@@ -913,7 +925,7 @@ snapshots:
 
   '@types/cors@2.8.19':
     dependencies:
-      '@types/node': 24.3.1
+      '@types/node': 24.6.0
 
   '@types/geojson-vt@3.2.5':
     dependencies:
@@ -921,9 +933,9 @@ snapshots:
 
   '@types/geojson@7946.0.16': {}
 
-  '@types/node@24.3.1':
+  '@types/node@24.6.0':
     dependencies:
-      undici-types: 7.10.0
+      undici-types: 7.13.0
 
   '@types/supercluster@7.1.3':
     dependencies:
@@ -952,6 +964,10 @@ snapshots:
 
   append-field@1.0.0: {}
 
+  async-function@1.0.0: {}
+
+  async-generator-function@1.0.0: {}
+
   balanced-match@1.0.2: {}
 
   base64id@2.0.0: {}
@@ -967,7 +983,7 @@ snapshots:
     dependencies:
       bytes: 3.1.2
       content-type: 1.0.5
-      debug: 4.4.1(supports-color@5.5.0)
+      debug: 4.4.3(supports-color@5.5.0)
       http-errors: 2.0.0
       iconv-lite: 0.6.3
       on-finished: 2.4.1
@@ -1006,7 +1022,7 @@ snapshots:
   call-bound@1.0.4:
     dependencies:
       call-bind-apply-helpers: 1.0.2
-      get-intrinsic: 1.3.0
+      get-intrinsic: 1.3.1
 
   chokidar@3.6.0:
     dependencies:
@@ -1048,7 +1064,7 @@ snapshots:
     dependencies:
       ms: 2.1.3
 
-  debug@4.4.1(supports-color@5.5.0):
+  debug@4.4.3(supports-color@5.5.0):
     dependencies:
       ms: 2.1.3
     optionalDependencies:
@@ -1056,7 +1072,7 @@ snapshots:
 
   depd@2.0.0: {}
 
-  dotenv@17.2.2: {}
+  dotenv@17.2.3: {}
 
   dunder-proto@1.0.1:
     dependencies:
@@ -1091,7 +1107,7 @@ snapshots:
   engine.io@6.6.4:
     dependencies:
       '@types/cors': 2.8.19
-      '@types/node': 24.3.1
+      '@types/node': 24.6.0
       accepts: 1.3.8
       base64id: 2.0.0
       cookie: 0.7.2
@@ -1129,7 +1145,7 @@ snapshots:
       content-type: 1.0.5
       cookie: 0.7.2
       cookie-signature: 1.2.2
-      debug: 4.4.1(supports-color@5.5.0)
+      debug: 4.4.3(supports-color@5.5.0)
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
@@ -1159,7 +1175,7 @@ snapshots:
 
   finalhandler@2.1.0:
     dependencies:
-      debug: 4.4.1(supports-color@5.5.0)
+      debug: 4.4.3(supports-color@5.5.0)
       encodeurl: 2.0.0
       escape-html: 1.0.3
       on-finished: 2.4.1
@@ -1177,15 +1193,20 @@ snapshots:
 
   function-bind@1.1.2: {}
 
+  generator-function@2.0.0: {}
+
   geojson-vt@4.0.2: {}
 
-  get-intrinsic@1.3.0:
+  get-intrinsic@1.3.1:
     dependencies:
+      async-function: 1.0.0
+      async-generator-function: 1.0.0
       call-bind-apply-helpers: 1.0.2
       es-define-property: 1.0.1
       es-errors: 1.3.0
       es-object-atoms: 1.1.1
       function-bind: 1.1.2
+      generator-function: 2.0.0
       get-proto: 1.0.1
       gopd: 1.2.0
       has-symbols: 1.1.0
@@ -1281,7 +1302,7 @@ snapshots:
 
   kdbush@4.0.2: {}
 
-  libphonenumber-js@1.12.15: {}
+  libphonenumber-js@1.12.23: {}
 
   lodash.includes@4.3.0: {}
 
@@ -1299,7 +1320,7 @@ snapshots:
 
   lodash@4.17.21: {}
 
-  maplibre-gl@5.7.1:
+  maplibre-gl@5.7.3:
     dependencies:
       '@mapbox/geojson-rewind': 0.5.2
       '@mapbox/jsonlint-lines-primitives': 2.0.2
@@ -1308,7 +1329,7 @@ snapshots:
       '@mapbox/unitbezier': 0.0.1
       '@mapbox/vector-tile': 2.0.4
       '@mapbox/whoots-js': 3.1.0
-      '@maplibre/maplibre-gl-style-spec': 23.3.0
+      '@maplibre/maplibre-gl-style-spec': 24.2.0
       '@maplibre/vt-pbf': 4.0.3
       '@types/geojson': 7946.0.16
       '@types/geojson-vt': 3.2.5
@@ -1332,7 +1353,7 @@ snapshots:
 
   memory-pager@1.5.0: {}
 
-  mercadopago@2.8.0:
+  mercadopago@2.9.0:
     dependencies:
       node-fetch: 2.7.0
       uuid: 9.0.1
@@ -1370,11 +1391,11 @@ snapshots:
 
   mongodb@6.18.0:
     dependencies:
-      '@mongodb-js/saslprep': 1.3.0
+      '@mongodb-js/saslprep': 1.3.1
       bson: 6.10.4
       mongodb-connection-string-url: 3.0.2
 
-  mongoose@8.18.1:
+  mongoose@8.18.3:
     dependencies:
       bson: 6.10.4
       kareem: 2.6.3
@@ -1397,7 +1418,7 @@ snapshots:
 
   mquery@5.0.0:
     dependencies:
-      debug: 4.4.1(supports-color@5.5.0)
+      debug: 4.4.3(supports-color@5.5.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -1434,7 +1455,7 @@ snapshots:
   nodemon@3.1.10:
     dependencies:
       chokidar: 3.6.0
-      debug: 4.4.1(supports-color@5.5.0)
+      debug: 4.4.3(supports-color@5.5.0)
       ignore-by-default: 1.0.1
       minimatch: 3.1.2
       pstree.remy: 1.1.8
@@ -1512,7 +1533,7 @@ snapshots:
 
   router@2.2.0:
     dependencies:
-      debug: 4.4.1(supports-color@5.5.0)
+      debug: 4.4.3(supports-color@5.5.0)
       depd: 2.0.0
       is-promise: 4.0.0
       parseurl: 1.3.3
@@ -1530,7 +1551,7 @@ snapshots:
 
   send@1.2.0:
     dependencies:
-      debug: 4.4.1(supports-color@5.5.0)
+      debug: 4.4.3(supports-color@5.5.0)
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
@@ -1564,14 +1585,14 @@ snapshots:
     dependencies:
       call-bound: 1.0.4
       es-errors: 1.3.0
-      get-intrinsic: 1.3.0
+      get-intrinsic: 1.3.1
       object-inspect: 1.13.4
 
   side-channel-weakmap@1.0.2:
     dependencies:
       call-bound: 1.0.4
       es-errors: 1.3.0
-      get-intrinsic: 1.3.0
+      get-intrinsic: 1.3.1
       object-inspect: 1.13.4
       side-channel-map: 1.0.1
 
@@ -1683,7 +1704,7 @@ snapshots:
 
   undefsafe@2.0.5: {}
 
-  undici-types@7.10.0: {}
+  undici-types@7.13.0: {}
 
   unpipe@1.0.0: {}
 

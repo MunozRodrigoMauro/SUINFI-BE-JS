@@ -1,5 +1,6 @@
 // Importamos funciones para validar campos del request
 import { body } from "express-validator";
+import { capitalizeWords } from "../utils/capitalizeWords.js";
 
 // Creamos un array de validaciones para el registro de usuario
 export const userValidationRules = [
