@@ -1,10 +1,12 @@
-// src/index.js
 import path from "path";
 import fs from "fs";
 import cors from "cors";
 import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+
+// 🔧 CAMBIO: importar multer para detectar MulterError en el handler global
+import multer from "multer";
 
 import userRoutes from "./routes/user.routes.js";
 import authRoutes from "./routes/auth.routes.js";
@@ -13,6 +15,7 @@ import categoryRoutes from "./routes/category.routes.js";
 import professionalRoutes from "./routes/professional.routes.js";
 import bookingRoutes from "./routes/booking.routes.js";
 import reviewRoutes from "./routes/review.routes.js";
+import favoritesRoutes from "./routes/favorite.routes.js";
 import chatRoutes from "./routes/chat.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
 import clientRoutes from "./routes/client.routes.js";
@@ -21,8 +24,7 @@ import { debugVerifySmtp } from "./services/mailer.js";
 import paymentRoutes from "./routes/payments.routes.js";
 import startCleanupUnpaidPrebookings from "./scripts/cleanupUnpaidPrebookings.js";
 import startCleanupUnpaid from "./scripts/cleanupUnpaidBookings.js";
-import pointsRoutes from "./routes/points.routes.js";
-import rewardsRoutes from "./routes/rewards.routes.js";
+
 import cron from "node-cron";
 import isNowWithinSchedule from "./utils/schedule.js";
 import { registerNotificationsCron } from "./utils/notifications-cron.js";
@@ -31,10 +33,10 @@ import ProfessionalModel from "./models/Professional.js";
 
 import { createServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
+
 import jwt from "jsonwebtoken";
 
 import whatsappRoutes from "./routes/whatsapp.routes.js";
-import reportRoutes from "./routes/report.routes.js";
 
 dotenv.config();
 
@@ -53,13 +55,14 @@ app.use(express.json());
 
 app.use(
   cors({
-    origin: ["http://localhost:5173", "https://www.cuyit.com"],
+    origin: "http://localhost:5173",
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
+// Static /uploads
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.resolve("uploads");
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 app.use("/uploads", express.static(UPLOAD_DIR, { maxAge: "1d", index: false }));
@@ -67,7 +70,7 @@ app.use("/uploads", express.static(UPLOAD_DIR, { maxAge: "1d", index: false }));
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: ["http://localhost:5173", "https://www.cuyit.com"],
+    origin: "http://localhost:5173",
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   },
@@ -116,8 +119,6 @@ io.on("connection", (socket) => {
 
       socket.join(userId);
       socket.data.userId = userId;
-      console.log("[SOCKET] joinUser userId=%s socket=%s", userId, socket.id);
-      touchActivity(userId);
 
       const room = io.sockets.adapter.rooms.get(userId);
       if (room && room.size === 1) {
@@ -137,27 +138,6 @@ io.on("connection", (socket) => {
       console.error("joinUser error:", e);
     }
   });
-
-  // 💓 Heartbeat del cliente (solo registra actividad)
-  socket.on("heartbeat", async () => {
-    const uid = socket.data?.userId;
-    if (!uid) return;
-    await touchActivity(uid);
-    console.log("[HB] userId=%s at=%s", uid, new Date().toISOString());
-  });
-
-  async function touchActivity(userId) {
-    try {
-      if (!userId) return;
-      await ProfessionalModel.updateOne(
-        { user: userId },
-        { $set: { lastActivityAt: new Date() } },
-        { timestamps: false }
-      );
-    } catch (e) {
-      console.warn("socket touchActivity:", e?.message || e);
-    }
-  }
 
   socket.on("joinRoom", (room) => {
     if (!room) return;
@@ -196,6 +176,7 @@ io.on("connection", (socket) => {
   });
 });
 
+// Rutas API
 app.use("/api/users", userRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/services", serviceRoutes);
@@ -209,11 +190,8 @@ app.use("/api/admins", adminRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
 app.use("/api/payments", paymentRoutes);
-app.use("/api/reports", reportRoutes);
-app.use("/api/points", pointsRoutes);
-app.use("/api/rewards", rewardsRoutes);
 
-// Google OAuth (igual que tenías) ...
+// OAuth Google
 app.get("/api/auth/google", (req, res) => {
   const next =
     typeof req.query.next === "string" && req.query.next ? req.query.next : "";
@@ -284,7 +262,29 @@ app.get("/api/auth/google/callback", async (req, res) => {
 });
 
 app.get("/", (_req, res) => {
-  res.send("Bienvenido a la API de CuyIT 🎯");
+  res.send("Bienvenido a la API de SUINFI 🎯");
+});
+
+// 🔧 CAMBIO: handler global de errores → devuelve JSON (incluye MulterError)
+app.use((err, _req, res, _next) => {
+  if (!err) return res.status(500).json({ message: "Server error" });
+
+  // Multer errors (tamaño, campo, etc.)
+  if (err instanceof multer.MulterError) {
+    const status = err.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+    return res.status(status).json({
+      message: err.message || "Upload error",
+      code: err.code,
+    });
+  }
+
+  // Errores de validación de tipo (nuestros fileFilter)
+  if (typeof err.message === "string") {
+    const isTypeIssue = /solo imágenes|solo imagenes|image|pdf/i.test(err.message);
+    return res.status(isTypeIssue ? 415 : err.status || 400).json({ message: err.message });
+  }
+
+  return res.status(500).json({ message: "Server error" });
 });
 
 const PORT = process.env.PORT || 3000;
@@ -306,61 +306,20 @@ mongoose
     console.error("❌ Error al conectar a Mongo:", err);
   });
 
-/* ───────── Helpers schedule ───────── */
-function todayKey() {
-  const days = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
-  return days[new Date().getDay()];
-}
-function nowHHMM() {
-  const d = new Date();
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${hh}:${mm}`;
-}
-function isBoundaryNow(scheduleRaw = {}) {
-  const day = todayKey();
-  const slot = scheduleRaw?.[day];
-  if (!slot || !slot.from || !slot.to) return false;
-  const hhmm = nowHHMM();
-  return hhmm === slot.from || hhmm === slot.to;
-}
-
-/* ───────── CRON por schedule ─────────
-   Solo aplica ON/OFF EN LOS LÍMITES (from/to).
-   Entre medio, respeta los cambios manuales temporales.
-*/
 cron.schedule("* * * * *", async () => {
   try {
     const pros = await ProfessionalModel.find(
       { availabilityStrategy: "schedule" },
-      { _id:1, user:1, isAvailableNow:1, availabilitySchedule:1 }
+      { _id: 1, user: 1, isAvailableNow: 1, availabilitySchedule: 1 }
     );
 
-    console.log("[CRON schedule:scan] count=", pros.length);
-
     for (const p of pros) {
-      const raw = p.availabilitySchedule instanceof Map
-        ? Object.fromEntries(p.availabilitySchedule)
-        : (p.availabilitySchedule || {});
-      const hasAnySlot = Object.values(raw).some(v => v && v.from && v.to);
-      if (!hasAnySlot) {
-        console.log("[CRON schedule:skip empty] user=%s", p.user.toString());
-        continue;
-      }
+      const shouldBeOn = isNowWithinSchedule(p.availabilitySchedule);
 
-      // 🚦 Sólo en los bordes (from/to) se aplica el estado del schedule
-      if (!isBoundaryNow(raw)) {
-        continue;
-      }
-
-      const shouldBeOn = isNowWithinSchedule(raw);
       if (p.isAvailableNow !== shouldBeOn) {
-        console.log("[CRON schedule:update] user=%s %s -> %s",
-          p.user.toString(), p.isAvailableNow, shouldBeOn);
-
         await ProfessionalModel.updateOne(
           { _id: p._id },
-          { $set: { isAvailableNow: shouldBeOn, onlineSince: shouldBeOn ? new Date() : null } },
+          { $set: { isAvailableNow: shouldBeOn } },
           { timestamps: false }
         );
 
@@ -373,75 +332,5 @@ cron.schedule("* * * * *", async () => {
     }
   } catch (e) {
     console.error("Cron availability error:", e);
-  }
-});
-
-/* ───────── Auto-desconexión por inactividad ─────────
-   Aplica a:
-   - modo MANUAL (siempre)
-   - modo SCHEDULE pero sólo cuando está FUERA del horario
-*/
-const INACTIVITY_MIN = Number(process.env.INACTIVITY_MINUTES || 1);
-
-cron.schedule("*/10 * * * * *", async () => {
-  try {
-    const threshold = new Date(Date.now() - INACTIVITY_MIN * 60 * 1000);
-    console.log("[CRON idle:scan] threshold=%s", threshold.toISOString());
-
-    const cursor = ProfessionalModel.find(
-      {
-        isAvailableNow: true,
-        onlineSince: { $ne: null },
-      },
-      { _id:1, user:1, lastActivityAt:1, onlineSince:1, availabilityStrategy:1, availabilitySchedule:1 }
-    ).cursor();
-
-    for await (const p of cursor) {
-      const userId = p.user.toString();
-
-      // ¿Debemos aplicar inactividad a este pro?
-      let applyInactivity = true;
-      if (p.availabilityStrategy === "schedule") {
-        const raw = p.availabilitySchedule instanceof Map
-          ? Object.fromEntries(p.availabilitySchedule)
-          : (p.availabilitySchedule || {});
-        // Si ESTÁ dentro del horario programado, no aplicamos inactividad
-        if (isNowWithinSchedule(raw)) {
-          applyInactivity = false;
-        }
-      }
-
-      const effectiveLast = new Date(Math.max(
-        p.lastActivityAt ? p.lastActivityAt.getTime() : 0,
-        p.onlineSince ? p.onlineSince.getTime() : 0
-      ));
-
-      // logging de sockets (no condiciona)
-      const room = io.sockets.adapter.rooms.get(userId);
-      const sockets = room ? room.size : 0;
-      console.log("[CRON idle:consider] user=%s last=%s sockets=%d strategy=%s apply=%s",
-        userId, effectiveLast.toISOString(), sockets, p.availabilityStrategy || "n/a", applyInactivity);
-
-      if (!applyInactivity) continue;
-
-      if (effectiveLast >= threshold) {
-        console.log("[CRON idle:keep] user=%s (recent activity)", userId);
-        continue;
-      }
-
-      await ProfessionalModel.updateOne(
-        { _id: p._id },
-        { $set: { isAvailableNow: false, onlineSince: null } },
-        { timestamps: false }
-      );
-
-      console.log("[CRON idle:off] user=%s nowOff", userId);
-
-      const payload = { userId, isAvailableNow: false, at: new Date().toISOString() };
-      io.emit("availability:update", payload);
-      io.to(userId).emit("availability:self", payload);
-    }
-  } catch (e) {
-    console.error("Cron inactivity error:", e);
   }
 });
