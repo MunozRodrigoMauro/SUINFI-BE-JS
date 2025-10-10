@@ -7,6 +7,8 @@ import dotenv from "dotenv";
 
 // 🔧 CAMBIO: importar multer para detectar MulterError en el handler global
 import multer from "multer";
+import rewardsRoutes from "./routes/rewards.routes.js";
+import pointsRoutes from "./routes/points.routes.js";
 
 import userRoutes from "./routes/user.routes.js";
 import authRoutes from "./routes/auth.routes.js";
@@ -63,7 +65,7 @@ app.use(
 );
 
 // Static /uploads
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.resolve("uploads");
+const UPLOAD_DIR = path.resolve(process.cwd(), "./uploads");
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 app.use("/uploads", express.static(UPLOAD_DIR, { maxAge: "1d", index: false }));
 
@@ -190,6 +192,9 @@ app.use("/api/admins", adminRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/rewards", rewardsRoutes);
+app.use("/api/points", pointsRoutes);
+
 
 // OAuth Google
 app.get("/api/auth/google", (req, res) => {
@@ -262,7 +267,7 @@ app.get("/api/auth/google/callback", async (req, res) => {
 });
 
 app.get("/", (_req, res) => {
-  res.send("Bienvenido a la API de SUINFI 🎯");
+  res.send("Bienvenido a la API de CuyIT 🎯");
 });
 
 // 🔧 CAMBIO: handler global de errores → devuelve JSON (incluye MulterError)
