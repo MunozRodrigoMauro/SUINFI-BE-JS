@@ -23,9 +23,9 @@ function getConfig() {
     SMTP_PASS,
     SMTP_SECURE: secureFlag,
     // remitente por defecto: misma casilla SMTP para evitar rechazos del proveedor
-    SMTP_FROM: SMTP_FROM || SMTP_NO_REPLY || SMTP_USER || "no-reply@suinfi.com",
-    SMTP_NO_REPLY: SMTP_NO_REPLY || SMTP_FROM || SMTP_USER || "no-reply@suinfi.com",
-    SMTP_SUPPORT: SMTP_SUPPORT || SMTP_REPLY_TO || "info@suinfi.com",
+    SMTP_FROM: SMTP_FROM || SMTP_NO_REPLY || SMTP_USER || "no-reply@cuyit.com",
+    SMTP_NO_REPLY: SMTP_NO_REPLY || SMTP_FROM || SMTP_USER || "no-reply@cuyit.com",
+    SMTP_SUPPORT: SMTP_SUPPORT || SMTP_REPLY_TO || "info@cuyit.com",
     SMTP_FROM_NAME: SMTP_FROM_NAME || "CuyIT",
     APP_PUBLIC_URL: APP_PUBLIC_URL || "http://localhost:5173",
   };

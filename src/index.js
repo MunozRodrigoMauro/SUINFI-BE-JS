@@ -55,14 +55,24 @@ import {
 const app = express();
 app.use(express.json());
 
+const ALLOWED_ORIGINS = [
+  "http://localhost:5173",
+  "https://www.cuyit.com",
+  "https://cuyit.com",
+];
+
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);              // mobile/Postman
+      return cb(null, ALLOWED_ORIGINS.includes(origin));
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
 
 // Static /uploads
 const UPLOAD_DIR = path.resolve(process.cwd(), "./uploads");
@@ -72,7 +82,7 @@ app.use("/uploads", express.static(UPLOAD_DIR, { maxAge: "1d", index: false }));
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: ALLOWED_ORIGINS,
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   },
