@@ -73,6 +73,21 @@ app.use(
   })
 );
 
+// CHANGES [CSP]: permitir que el front embeba (iframe) respuestas de la API
+const FRAME_ANCESTORS = [
+  "https://www.cuyit.com",
+  "https://cuyit.com",
+  "http://localhost:5173", // dev
+];
+
+app.use((req, res, next) => {
+  res.setHeader(
+    "Content-Security-Policy",
+    `frame-ancestors ${FRAME_ANCESTORS.join(" ")}`
+  );
+  next();
+});
+
 
 // Static /uploads
 const UPLOAD_DIR = path.resolve(process.cwd(), "./uploads");

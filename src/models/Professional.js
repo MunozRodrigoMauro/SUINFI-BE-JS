@@ -1,3 +1,4 @@
+// src/models/Professional.js
 import mongoose from "mongoose";
 
 // ---- Subdocumento para archivos/documentación ----

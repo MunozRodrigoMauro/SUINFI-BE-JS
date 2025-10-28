@@ -181,22 +181,68 @@ export const createProfessionalProfile = async (req, res) => {
 
 export const getProfessionals = async (req, res) => {
   try {
-    const { serviceId, categoryId, availableNow, page = 1, limit = 12 } = req.query;
+    const {
+      serviceId,
+      categoryId,
+      availableNow,
+      page = 1,
+      limit = 12,
+      // [CHANGE GP-CSV] admitir CSV/array de servicios en query (?services=a,b,c o services[]=a&services[]=b)
+      services: servicesParam,
+    } = req.query;
 
     const query = {};
 
-    if (serviceId && mongoose.Types.ObjectId.isValid(serviceId)) {
-      query.services = serviceId;
+    // [CHANGE GP-CSV] construir set de servicios filtrados
+    let serviceIdsFilter = [];
+
+    // soporta CSV string o array
+    if (Array.isArray(servicesParam)) {
+      serviceIdsFilter = servicesParam
+        .map((s) => String(s).trim())
+        .filter((s) => mongoose.Types.ObjectId.isValid(s));
+    } else if (typeof servicesParam === "string" && servicesParam.trim()) {
+      serviceIdsFilter = String(servicesParam)
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => mongoose.Types.ObjectId.isValid(s));
     }
 
+    if (serviceId && mongoose.Types.ObjectId.isValid(serviceId)) {
+      serviceIdsFilter.push(serviceId);
+    }
+
+    // Si viene categoría, intersectamos con los servicios de esa categoría
     if (categoryId && mongoose.Types.ObjectId.isValid(categoryId)) {
       const servicesInCategory = await ServiceModel.find({ category: categoryId }, "_id");
-      const ids = servicesInCategory.map((s) => s._id);
-      if (ids.length) query.services = { $in: ids };
-      else return res.json({ items: [], total: 0, page: 1, pages: 1 });
+      const categoryIds = servicesInCategory.map((s) => s._id.toString());
+
+      if (serviceIdsFilter.length) {
+        const set = new Set(categoryIds);
+        serviceIdsFilter = serviceIdsFilter.filter((id) => set.has(id));
+        if (serviceIdsFilter.length === 0) {
+          // CHANGES: log para auditoría
+          console.log("[GET /professionals] services∩category => vacío");
+          return res.json({ items: [], total: 0, page: 1, pages: 1 });
+        }
+      } else {
+        serviceIdsFilter = categoryIds;
+      }
     }
 
+    if (serviceIdsFilter.length === 1) {
+      query.services = serviceIdsFilter[0];
+    } else if (serviceIdsFilter.length > 1) {
+      query.services = { $in: serviceIdsFilter };
+    }
+
+    // En schedule (availableNow !== "true"), NO filtrar por disponibilidad
     if (String(availableNow) === "true") query.isAvailableNow = true;
+
+    // CHANGES: log params y query armada
+    console.log("[GET /professionals] params=%o query=%o", {
+      serviceId, categoryId, availableNow, page, limit, servicesParam, serviceIdsFilter
+    }, query);
 
     const pageNum = Math.max(parseInt(page) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit) || 12, 1), 50);
@@ -219,6 +265,9 @@ export const getProfessionals = async (req, res) => {
     const items = filterVerifiedWithUser(itemsRaw);
     const total = items.length;
     const pages = Math.max(Math.ceil(total / limitNum), 1);
+
+    // CHANGES: log resultado
+    console.log("[GET /professionals] result: items=%d page=%d pages=%d", total, pageNum, pages);
 
     return res.json({ items, total, page: pageNum, pages });
   } catch (error) {
@@ -254,24 +303,70 @@ export const getProfessionalById = async (req, res) => {
 
 export const getNearbyProfessionals = async (req, res) => {
   try {
-    const { lat, lng, maxDistance = 5000, serviceId, categoryId, availableNow } = req.query;
+    const {
+      lat,
+      lng,
+      maxDistance = 5000,
+      serviceId,
+      categoryId,
+      availableNow,
+      // [CHANGE NEAR-CSV] admitir CSV/array de servicios en nearby (?services=a,b,c o services[]=a...)
+      services: servicesParam,
+    } = req.query;
+
     if (!lat || !lng)
       return res.status(400).json({ error: "Latitude and longitude are required" });
 
     const query = {};
+    // En schedule (availableNow !== "true"), NO filtrar por disponibilidad
     if (String(availableNow) === "true") query.isAvailableNow = true;
 
+    // [CHANGE NEAR-CSV] construir set de servicios filtrados
+    let serviceIdsFilter = [];
+
+    // soporta CSV string o array
+    if (Array.isArray(servicesParam)) {
+      serviceIdsFilter = servicesParam
+        .map((s) => String(s).trim())
+        .filter((s) => mongoose.Types.ObjectId.isValid(s));
+    } else if (typeof servicesParam === "string" && servicesParam.trim()) {
+      serviceIdsFilter = String(servicesParam)
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => mongoose.Types.ObjectId.isValid(s));
+    }
+
     if (serviceId && mongoose.Types.ObjectId.isValid(serviceId)) {
-      query.services = serviceId;
+      serviceIdsFilter.push(serviceId);
     }
 
     if (categoryId && mongoose.Types.ObjectId.isValid(categoryId)) {
       const sIds = await ServiceModel.find({ category: categoryId }, "_id").then((x) =>
-        x.map((s) => s._id)
+        x.map((s) => s._id.toString())
       );
-      query.services = sIds.length ? { $in: sIds } : "__EMPTY__";
+      if (serviceIdsFilter.length) {
+        const set = new Set(sIds);
+        serviceIdsFilter = serviceIdsFilter.filter((id) => set.has(id));
+        if (serviceIdsFilter.length === 0) {
+          // CHANGES: log para auditoría
+          console.log("[GET /professionals/nearby] services∩category => vacío");
+          return res.json([]);
+        }
+      } else {
+        serviceIdsFilter = sIds;
+      }
     }
-    if (query.services === "__EMPTY__") return res.json([]);
+
+    if (serviceIdsFilter.length === 1) {
+      query.services = serviceIdsFilter[0];
+    } else if (serviceIdsFilter.length > 1) {
+      query.services = { $in: serviceIdsFilter };
+    }
+
+    // CHANGES: log params y query previa a $near
+    console.log("[GET /professionals/nearby] params=%o query=%o", {
+      lat, lng, maxDistance, serviceId, categoryId, availableNow, servicesParam, serviceIdsFilter
+    }, query);
 
     const raw = await ProfessionalModel.find({
       ...query,
@@ -294,6 +389,10 @@ export const getNearbyProfessionals = async (req, res) => {
       });
 
     const pros = filterVerifiedWithUser(raw);
+
+    // CHANGES: log cantidad devuelta
+    console.log("[GET /professionals/nearby] result: count=%d", pros.length);
+
     res.json(pros);
   } catch (err) {
     console.error("nearby error", err);
@@ -710,3 +809,11 @@ export const updateMyPayout = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
+/*
+[CAMBIOS HECHOS AQUÍ]
+- getProfessionals: ahora acepta `services` como CSV o array además de `serviceId` y lo cruza con `categoryId` si llega. [CHANGE GP-CSV]
+- getNearbyProfessionals: igual que arriba, acepta `services` CSV/array + `serviceId` y mantiene consulta geoespacial con $near. [CHANGE NEAR-CSV]
+- En ambos: agregué logs `console.log` (// CHANGES) para corroborar filtros recibidos y tamaño de resultados.
+- En schedule (availableNow !== "true"), NO filtrar por disponibilidad (se retorna el set filtrado por área/ubicación).
+*/

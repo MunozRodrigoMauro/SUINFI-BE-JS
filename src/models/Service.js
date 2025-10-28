@@ -1,3 +1,4 @@
+// src/models/Service.js
 import mongoose from "mongoose"; // ODM de MongoDB
 import { capitalizeWords } from "../utils/capitalizeWords.js";
 import { slugify } from "../utils/slugify.js";
