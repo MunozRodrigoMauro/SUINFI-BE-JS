@@ -166,14 +166,6 @@ export async function sendPasswordResetEmail(to, name, token) {
               Restablecer contraseña
             </a>
           </td></tr>
-          <tr><td style="padding:20px 28px 0 28px">
-            <p style="margin:0 0 6px 0;color:#64748b;font-size:12px;line-height:1.6;font-family:system-ui,-apple-system,Segoe UI,Roboto">
-              Si el botón no funciona, copiá y pegá este enlace:
-            </p>
-            <div style="word-break:break-all;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px">
-              <a href="${link}" style="color:#0a0e17;text-decoration:none;font-size:12px;font-family:ui-monospace,monospace">${link}</a>
-            </div>
-          </td></tr>
         </table>
         <div style="color:#94a3b8;font-size:11px;margin-top:12px;font-family:system-ui,-apple-system,Segoe UI,Roboto">© ${new Date().getFullYear()} CuyIT</div>
       </td></tr>

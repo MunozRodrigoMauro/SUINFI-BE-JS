@@ -22,6 +22,20 @@ function nl2br(s = "") {
   return escapeHtml(s).replace(/\n/g, "<br/>");
 }
 
+/* [CAMBIO] helper para formatear fecha/hora en AR forzando zona horaria */
+const AR_TIME_FMT = {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZone: "America/Argentina/Buenos_Aires",
+};
+function formatARDate(value) {
+  return new Date(value).toLocaleString("es-AR", AR_TIME_FMT);
+}
+
 /** Misma estética que el mail de verificación */
 function buildBrandedHtml({ title, message, ctaHref, ctaLabel = "Abrir en CuyIT", bodyHtml }) {
   return `
@@ -46,15 +60,6 @@ function buildBrandedHtml({ title, message, ctaHref, ctaLabel = "Abrir en CuyIT"
             <a href="${ctaHref}" style="display:inline-block;background:linear-gradient(180deg,#1f2a44,#111827);color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:12px;font-weight:800;font-size:16px;font-family:system-ui,-apple-system,Segoe UI,Roboto;cursor:pointer">
               ${escapeHtml(ctaLabel)}
             </a>
-          </td></tr>
-
-          <tr><td style="padding:20px 28px 0 28px">
-            <p style="margin:0 0 6px 0;color:#64748b;font-size:12px;line-height:1.6;font-family:system-ui,-apple-system,Segoe UI,Roboto">
-              Si el botón no funciona, copiá y pegá este enlace:
-            </p>
-            <div style="word-break:break-all;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px">
-              <a href="${ctaHref}" style="color:#0a0e17;text-decoration:none;font-size:12px;font-family:ui-monospace,monospace">${ctaHref}</a>
-            </div>
           </td></tr>
 
           <tr><td style="padding:24px 28px 28px 28px">
@@ -93,7 +98,7 @@ export async function notifyBookingCreated({ booking }) {
   if (!recipient) return;
 
   const when = new Date(booking.scheduledAt);
-  const whenStr = when.toLocaleString("es-AR", { dateStyle: "short", timeStyle: "medium" });
+  const whenStr = formatARDate(when); // [CAMBIO]
   const clientName = booking?.client?.name || "Cliente";
   const serviceName = booking?.service?.name || "Servicio";
 
@@ -126,7 +131,7 @@ export async function notifyBookingCanceledByClient({ booking }) {
   if (!recipient) return;
 
   const subject = `Reserva Cancelada`;
-  const whenStr = new Date(booking.scheduledAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" });
+  const whenStr = formatARDate(booking.scheduledAt); // [CAMBIO]
   const clientName = booking?.client?.name || "Cliente";
   const serviceName = booking?.service?.name || "Servicio";
   const cancelReason = [booking?.cancelNote, booking?.note]
@@ -157,9 +162,10 @@ export async function notifyBookingCanceledByPro({ booking }) {
   if (!recipient) return;
 
   const subject = `Reserva Cancelada`;
-  const whenStr = new Date(booking.scheduledAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" });
+  const whenStr = formatARDate(booking.scheduledAt); // [CAMBIO]
   const professionalName = booking?.professional?.user?.name || "Profesional";
   const serviceName = booking?.service?.name || "Servicio";
+  const cancelReason = (booking?.cancelNote || booking?.note || "").trim() || "No especificado";
 
   const message = `Tu reserva del ${whenStr} fue cancelada por el profesional. Motivo: ${cancelReason}`;
 
@@ -262,7 +268,7 @@ export async function dispatchEmailForNotification(notif) {
     const clientName = notif?.metadata?.clientName || "Cliente";
     const serviceName = notif?.metadata?.serviceName || "Servicio";
     const whenStr = notif?.metadata?.scheduledAt
-      ? new Date(notif.metadata.scheduledAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "medium" })
+      ? formatARDate(notif.metadata.scheduledAt) // [CAMBIO]
       : "";
     bodyHtml = `
       <div style="margin:0;color:#475569;font-size:14px;line-height:1.8;font-family:system-ui,-apple-system,Segoe UI,Roboto">
@@ -277,7 +283,7 @@ export async function dispatchEmailForNotification(notif) {
     const serviceName = notif?.metadata?.serviceName || "Servicio";
     const reason = notif?.metadata?.cancelReason || "No especificado";
     const whenStr = notif?.metadata?.scheduledAt
-      ? new Date(notif.metadata.scheduledAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "medium" })
+      ? formatARDate(notif.metadata.scheduledAt) // [CAMBIO]
       : "";
     bodyHtml = `
       <div style="margin:0;color:#475569;font-size:14px;line-height:1.8;font-family:system-ui,-apple-system,Segoe UI,Roboto">
@@ -292,7 +298,7 @@ export async function dispatchEmailForNotification(notif) {
     const proName = notif?.metadata?.professionalName || "Profesional";
     const serviceName = notif?.metadata?.serviceName || "Servicio";
     const whenStr = notif?.metadata?.scheduledAt
-      ? new Date(notif.metadata.scheduledAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "medium" })
+      ? formatARDate(notif.metadata.scheduledAt) // [CAMBIO]
       : "";
     bodyHtml = `
       <div style="margin:0;color:#475569;font-size:14px;line-height:1.8;font-family:system-ui,-apple-system,Segoe UI,Roboto">

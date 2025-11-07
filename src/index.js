@@ -328,15 +328,7 @@ mongoose
     startCleanupUnpaid();
     startCleanupUnpaidPrebookings();
 
-    httpServer.listen(PORT, () => {
-      console.log(`✅ Servidor corriendo en http://localhost:${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error("❌ Error al conectar a Mongo:", err);
-  });
-
-cron.schedule("* * * * *", async () => {
+    cron.schedule("* * * * *", async () => {
   try {
     const pros = await ProfessionalModel.find(
       { availabilityStrategy: "schedule" },
@@ -364,3 +356,13 @@ cron.schedule("* * * * *", async () => {
     console.error("Cron availability error:", e);
   }
 });
+
+    httpServer.listen(PORT, () => {
+      console.log(`✅ Servidor corriendo en http://localhost:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("❌ Error al conectar a Mongo:", err);
+  });
+
+
