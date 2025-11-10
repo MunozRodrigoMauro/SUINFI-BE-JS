@@ -98,12 +98,12 @@ export async function sendVerificationEmail(to, token) {
           <tr><td style="padding:16px 28px 0 28px;text-align:left">
             <p style="margin:0;color:#475569;font-size:14px;line-height:1.6;font-family:system-ui,-apple-system,Segoe UI,Roboto">Bienvenid@, para activar tu cuenta hacé click en el botón:</p>
           </td></tr>
-          <tr><td align="center" style="padding:20px 28px 0 28px">
+          <tr><td align="center" style="padding:20px 28px 20px 28px">
             <a href="${link}" style="display:inline-block;background:linear-gradient(180deg,#1f2a44,#111827);color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:12px;font-weight:800;font-size:16px;font-family:system-ui,-apple-system,Segoe UI,Roboto;cursor:pointer">
               Verificar mi correo
             </a>
           </td></tr>
-          <tr><td style="padding:20px 28px 0 28px">
+          <tr><td style="padding:20px 28px 20px 28px">
             <p style="margin:0 0 6px 0;color:#64748b;font-size:12px;line-height:1.6;font-family:system-ui,-apple-system,Segoe UI,Roboto">
               Si el botón no funciona, copiá y pegá este enlace en tu navegador:
             </p>
@@ -161,7 +161,7 @@ export async function sendPasswordResetEmail(to, name, token) {
               Hola ${name || ""}, hacé click para restablecer tu contraseña (válido 1 hora):
             </p>
           </td></tr>
-          <tr><td align="center" style="padding:20px 28px 0 28px">
+          <tr><td align="center" style="padding:20px 28px 20px 28px">
             <a href="${link}" style="display:inline-block;background:linear-gradient(180deg,#1f2a44,#111827);color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:12px;font-weight:800;font-size:16px;font-family:system-ui,-apple-system,Segoe UI,Roboto;cursor:pointer">
               Restablecer contraseña
             </a>

@@ -15,7 +15,8 @@ export const listMyChats = async (req, res) => {
 
   const chats = await Conversation.find({ participants: me })
     .sort({ updatedAt: -1 })
-    .populate({ path: "lastMessage", select: "text createdAt from to" })
+    // [CHANGE] incluir readAt en el lastMessage para que el FE pueda decidir leído/no leído por chat
+    .populate({ path: "lastMessage", select: "text createdAt from to readAt" })
     .lean();
 
   // map otherUser + unreadCount
@@ -47,6 +48,8 @@ export const listMyChats = async (req, res) => {
             from: c.lastMessage.from,
             to: c.lastMessage.to,
             createdAt: c.lastMessage.createdAt,
+            // [CHANGE] exponer readAt al FE
+            readAt: c.lastMessage.readAt,
           }
         : null,
       unreadCount: unreadMap.get(String(c._id)) || 0,

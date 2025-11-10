@@ -56,7 +56,7 @@ function buildBrandedHtml({ title, message, ctaHref, ctaLabel = "Abrir en CuyIT"
             }
           </td></tr>
 
-          <tr><td align="center" style="padding:20px 28px 0 28px">
+          <tr><td align="center" style="padding:20px 28px 20PX 28px">
             <a href="${ctaHref}" style="display:inline-block;background:linear-gradient(180deg,#1f2a44,#111827);color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:12px;font-weight:800;font-size:16px;font-family:system-ui,-apple-system,Segoe UI,Roboto;cursor:pointer">
               ${escapeHtml(ctaLabel)}
             </a>
