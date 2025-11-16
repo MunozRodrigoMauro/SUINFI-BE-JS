@@ -1,4 +1,3 @@
-// src/controllers/booking.controller.js
 import mongoose from "mongoose";
 import Booking from "../models/Booking.js";
 import Professional from "../models/Professional.js";
@@ -40,7 +39,7 @@ export const createBooking = async (req, res) => {
       time,
       note = "",
       address = "",
-      isImmediate = false
+      isImmediate = false,
     } = req.body || {};
 
     // Validación básica (422 con details.errors para friendly UX en FE)
@@ -69,9 +68,8 @@ export const createBooking = async (req, res) => {
       .lean();
     if (!pro) return res.status(404).json({ message: "Profesional no encontrado" });
 
-    if (isImmediate && pro.isAvailableNow !== true) {
-      return res.status(409).json({ message: "El profesional ya no está disponible ahora." });
-    }
+    // [CAMBIO] ya no bloqueamos la reserva inmediata si el pro no está "availableNow".
+    // El tipo de reserva lo pide el cliente y puede quedar para el próximo turno.
 
     const svc = await Service.findById(serviceId).select("_id").lean();
     if (!svc) return res.status(404).json({ message: "Servicio no encontrado" });
@@ -116,7 +114,7 @@ export const createBooking = async (req, res) => {
       status: "pending",
       note: String(note || "").slice(0, 1000),
       address: address || "",
-      isImmediate: !!isImmediate,
+      isImmediate: !!isImmediate, // [CAMBIO] siempre respetamos lo que pidió el FE
       // ✨ Sin seña
       depositPaid: false,
       deposit: {
@@ -235,7 +233,11 @@ export const updateBookingStatus = async (req, res) => {
     }
 
     const bk = await Booking.findById(id)
-      .populate({ path: "professional", select: "user", populate: { path: "user", select: "_id name email" } })
+      .populate({
+        path: "professional",
+        select: "user",
+        populate: { path: "user", select: "_id name email" },
+      })
       .populate("client", "_id name email")
       .populate("service", "name");
 
@@ -266,7 +268,7 @@ export const updateBookingStatus = async (req, res) => {
     bk.status = status;
     const reason = (cancelNote ?? note ?? "").trim();
     if (reason) {
-      bk.note = reason.slice(0, 1000);        // si ya lo usás en UI
+      bk.note = reason.slice(0, 1000); // si ya lo usás en UI
       if (status === "canceled" && isClient) {
         bk.cancelNote = reason.slice(0, 1000); // <- clave para el mail
       }
@@ -274,7 +276,10 @@ export const updateBookingStatus = async (req, res) => {
     await bk.save();
 
     const populated = await Booking.findById(bk._id)
-      .populate({ path: "professional", populate: { path: "user", select: "name email avatarUrl" } })
+      .populate({
+        path: "professional",
+        populate: { path: "user", select: "name email avatarUrl" },
+      })
       .populate("client", "name email")
       .populate("service", "name price");
 

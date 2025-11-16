@@ -1,4 +1,3 @@
-// src/services/notification.service.js
 import Notification from "../models/Notification.js";
 import User from "../models/User.js";
 import Message from "../models/Message.js";
@@ -22,7 +21,7 @@ function nl2br(s = "") {
   return escapeHtml(s).replace(/\n/g, "<br/>");
 }
 
-/* [CAMBIO] helper para formatear fecha/hora en AR forzando zona horaria */
+/* helper para formatear fecha/hora en AR forzando zona horaria */
 const AR_TIME_FMT = {
   year: "numeric",
   month: "2-digit",
@@ -77,7 +76,12 @@ function buildBrandedHtml({ title, message, ctaHref, ctaLabel = "Abrir en CuyIT"
 
 /* Crea la notificación (el envío lo hace el cron / dispatcher) */
 export async function queueNotification({
-  recipient, type, subject, message, metadata = {}, notBefore = new Date()
+  recipient,
+  type,
+  subject,
+  message,
+  metadata = {},
+  notBefore = new Date(),
 }) {
   return await Notification.create({
     recipient,
@@ -98,12 +102,19 @@ export async function notifyBookingCreated({ booking }) {
   if (!recipient) return;
 
   const when = new Date(booking.scheduledAt);
-  const whenStr = formatARDate(when); // [CAMBIO]
+  const whenStr = formatARDate(when);
   const clientName = booking?.client?.name || "Cliente";
   const serviceName = booking?.service?.name || "Servicio";
 
-  const subject = `Nueva Reserva`;
+  // detectamos inmediata también por nota
+  const noteLower = String(booking?.note || "").toLowerCase();
+  const isImmediate =
+    booking?.isImmediate === true ||
+    noteLower.includes("reserva inmediata");
+
+  const subject = isImmediate ? `Nueva Reserva Inmediata` : `Nueva Reserva`;
   const message =
+    `Tipo: ${isImmediate ? "Reserva inmediata" : "Reserva programada"}\n` +
     `Cliente: ${clientName}\n` +
     `Tarea: ${serviceName}\n` +
     `Día y horario: ${whenStr}`;
@@ -121,6 +132,7 @@ export async function notifyBookingCreated({ booking }) {
       clientName,
       scheduledAt: booking?.scheduledAt,
       kind: "created",
+      isImmediate,
     },
     notBefore: new Date(),
   });
@@ -131,12 +143,13 @@ export async function notifyBookingCanceledByClient({ booking }) {
   if (!recipient) return;
 
   const subject = `Reserva Cancelada`;
-  const whenStr = formatARDate(booking.scheduledAt); // [CAMBIO]
+  const whenStr = formatARDate(booking.scheduledAt);
   const clientName = booking?.client?.name || "Cliente";
   const serviceName = booking?.service?.name || "Servicio";
-  const cancelReason = [booking?.cancelNote, booking?.note]
-    .map(v => (typeof v === "string" ? v.trim() : ""))
-    .find(v => !!v) || "No especificado";
+  const cancelReason =
+    [booking?.cancelNote, booking?.note]
+      .map((v) => (typeof v === "string" ? v.trim() : ""))
+      .find((v) => !!v) || "No especificado";
 
   const message = `La reserva del ${whenStr} fue cancelada por el cliente. Motivo: ${cancelReason}`;
 
@@ -162,7 +175,7 @@ export async function notifyBookingCanceledByPro({ booking }) {
   if (!recipient) return;
 
   const subject = `Reserva Cancelada`;
-  const whenStr = formatARDate(booking.scheduledAt); // [CAMBIO]
+  const whenStr = formatARDate(booking.scheduledAt);
   const professionalName = booking?.professional?.user?.name || "Profesional";
   const serviceName = booking?.service?.name || "Servicio";
   const cancelReason = (booking?.cancelNote || booking?.note || "").trim() || "No especificado";
@@ -190,9 +203,10 @@ export async function notifyBookingCanceledByPro({ booking }) {
 export async function notifyChatMessageDeferred({ messageDoc, sender, recipient }) {
   const subject = `Nuevo mensaje`;
   const textSender = sender?.name || "alguien";
-  const msgText = messageDoc.text.length > 120
-    ? messageDoc.text.slice(0, 117) + "..."
-    : messageDoc.text;
+  const msgText =
+    messageDoc.text.length > 120
+      ? messageDoc.text.slice(0, 117) + "..."
+      : messageDoc.text;
 
   const message = `Tenés un mensaje de ${textSender}: “${msgText}”.`;
 
@@ -224,14 +238,22 @@ export async function dispatchEmailForNotification(notif) {
       return { skipped: true, reason: "message_not_found" };
     }
     if (msg.readAt) {
-      await Notification.findByIdAndUpdate(notif._id, { status: "read", read: true });
+      await Notification.findByIdAndUpdate(notif._id, {
+        status: "read",
+        read: true,
+      });
       return { skipped: true, reason: "already_read" };
     }
   }
 
+  // vamos a necesitar estos dos más abajo
+  let bookingDoc = null;
+  let effectiveIsImmediate = !!notif?.metadata?.isImmediate;
+
   // Bookings: no enviar si el pro ya aceptó/rechazó
   if (notif.type === "booking" && notif?.metadata?.bookingId) {
     const b = await Booking.findById(notif.metadata.bookingId).lean();
+    bookingDoc = b; // lo guardamos para abajo
     if (!b) {
       await Notification.findByIdAndUpdate(notif._id, { status: "skipped" });
       return { skipped: true, reason: "booking_not_found" };
@@ -239,8 +261,18 @@ export async function dispatchEmailForNotification(notif) {
     const kind = notif?.metadata?.kind;
     if (kind === "created" || kind === "canceled_by_client") {
       if (b.status === "accepted" || b.status === "rejected") {
-        await Notification.findByIdAndUpdate(notif._id, { status: "skipped" });
+        await Notification.findByIdAndUpdate(notif._id, {
+          status: "skipped",
+        });
         return { skipped: true, reason: "pro_already_acted" };
+      }
+    }
+
+    // [CAMBIO DISPATCHER] recalcular si era inmediata mirando el booking real
+    if (!effectiveIsImmediate) {
+      const noteLower = String(b.note || "").toLowerCase();
+      if (b.isImmediate === true || noteLower.includes("reserva inmediata")) {
+        effectiveIsImmediate = true;
       }
     }
   }
@@ -259,19 +291,24 @@ export async function dispatchEmailForNotification(notif) {
   } else if (notif.type === "message" && notif?.metadata?.chatId) {
     redirectPath = `/chats/${notif.metadata.chatId}`;
   }
-  const ctaHref = `${APP_URL}/login?redirect=${encodeURIComponent(redirectPath)}`;
+  const ctaHref = `${APP_URL}/login?redirect=${encodeURIComponent(
+    redirectPath
+  )}`;
 
   // Cuerpo HTML
   let bodyHtml = null;
 
   if (notif.type === "booking" && notif?.metadata?.kind === "created") {
-    const clientName = notif?.metadata?.clientName || "Cliente";
-    const serviceName = notif?.metadata?.serviceName || "Servicio";
+    const clientName = notif?.metadata?.clientName || bookingDoc?.client?.name || "Cliente";
+    const serviceName = notif?.metadata?.serviceName || bookingDoc?.service?.name || "Servicio";
     const whenStr = notif?.metadata?.scheduledAt
-      ? formatARDate(notif.metadata.scheduledAt) // [CAMBIO]
+      ? formatARDate(notif.metadata.scheduledAt)
+      : bookingDoc?.scheduledAt
+      ? formatARDate(bookingDoc.scheduledAt)
       : "";
     bodyHtml = `
       <div style="margin:0;color:#475569;font-size:14px;line-height:1.8;font-family:system-ui,-apple-system,Segoe UI,Roboto">
+        <div><strong>Tipo:</strong> ${effectiveIsImmediate ? "Reserva inmediata" : "Reserva programada"}</div>
         <div><strong>Cliente:</strong> ${escapeHtml(clientName)}</div>
         <div><strong>Tarea:</strong> ${escapeHtml(serviceName)}</div>
         <div><strong>Día y horario:</strong> ${escapeHtml(whenStr)}</div>
@@ -283,7 +320,7 @@ export async function dispatchEmailForNotification(notif) {
     const serviceName = notif?.metadata?.serviceName || "Servicio";
     const reason = notif?.metadata?.cancelReason || "No especificado";
     const whenStr = notif?.metadata?.scheduledAt
-      ? formatARDate(notif.metadata.scheduledAt) // [CAMBIO]
+      ? formatARDate(notif.metadata.scheduledAt)
       : "";
     bodyHtml = `
       <div style="margin:0;color:#475569;font-size:14px;line-height:1.8;font-family:system-ui,-apple-system,Segoe UI,Roboto">
@@ -298,7 +335,7 @@ export async function dispatchEmailForNotification(notif) {
     const proName = notif?.metadata?.professionalName || "Profesional";
     const serviceName = notif?.metadata?.serviceName || "Servicio";
     const whenStr = notif?.metadata?.scheduledAt
-      ? formatARDate(notif.metadata.scheduledAt) // [CAMBIO]
+      ? formatARDate(notif.metadata.scheduledAt)
       : "";
     bodyHtml = `
       <div style="margin:0;color:#475569;font-size:14px;line-height:1.8;font-family:system-ui,-apple-system,Segoe UI,Roboto">
@@ -308,8 +345,18 @@ export async function dispatchEmailForNotification(notif) {
       </div>`;
   }
 
+  // [CAMBIO DISPATCHER] si al final resultó ser inmediata, forzamos el asunto
+  let subjectToSend = notif.subject || `Notificación`;
+  if (
+    notif.type === "booking" &&
+    notif?.metadata?.kind === "created" &&
+    effectiveIsImmediate
+  ) {
+    subjectToSend = "Nueva Reserva Inmediata";
+  }
+
   const html = buildBrandedHtml({
-    title: notif.subject || `Notificación`,
+    title: subjectToSend,
     message: notif.message,
     ctaHref,
     ctaLabel: "Abrir en CuyIT",
@@ -318,7 +365,7 @@ export async function dispatchEmailForNotification(notif) {
 
   const sent = await sendNotificationEmail({
     to: user.email,
-    subject: notif.subject || `Notificación`,
+    subject: subjectToSend,
     html,
     text: notif.message,
   });

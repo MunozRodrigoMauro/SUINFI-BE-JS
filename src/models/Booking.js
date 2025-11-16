@@ -37,6 +37,13 @@ const bookingSchema = new mongoose.Schema(
       default: "",
     },
 
+    // 🚀 NUEVO: flag para identificar reservas “inmediatas”
+    isImmediate: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
     // ⚠️ Importante: por default "not_required" para el flujo SIN seña
     depositPaid: { type: Boolean, default: false },
     deposit: {
@@ -57,5 +64,13 @@ const bookingSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// 🧩 Índice para acelerar y ayudar a evitar choques de turno en estados activos
+// (no es unique para no romper cargas masivas, pero colabora con consultas/locks de aplicación)
+bookingSchema.index({
+  professional: 1,
+  scheduledAt: 1,
+  status: 1,
+});
 
 export default mongoose.model("Booking", bookingSchema);
