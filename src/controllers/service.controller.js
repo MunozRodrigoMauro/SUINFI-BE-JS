@@ -23,8 +23,19 @@ export const createService = async (req, res) => {
 // controllers/service.controller.js
 export const getServices = async (req, res) => {
   try {
-    const { categoryId } = req.query;
-    const filter = categoryId ? { category: categoryId } : {};
+    const { categoryId, q } = req.query;
+
+    // 🔍 Armamos el filtro condicional
+    const filter = {};
+
+    if (categoryId) {
+      filter.category = categoryId;
+    }
+
+    if (q) {
+      filter.name = { $regex: q, $options: 'i' }; // Búsqueda case-insensitive por nombre
+    }
+
     const items = await ServiceModel.find(filter).select("name description price category");
     res.json(items);
   } catch (e) {

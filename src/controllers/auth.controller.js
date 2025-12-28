@@ -110,26 +110,52 @@ export const resendVerification = async (req, res) => {
 /* ==================== 🔐 Reset de contraseña (público) ==================== */
 // POST /api/auth/password-reset/request { email }
 export async function requestPasswordReset(req, res) {
-  const { email } = req.body || {};
-  // Siempre respondemos 200 (sin filtrar si existe o no)
   try {
-    const user = email ? await UserModel.findOne({ email: email.toLowerCase() }) : null;
-    if (user) {
-      const rawToken = crypto.randomBytes(32).toString("hex");
-      user.passwordResetTokenHash = hashToken(rawToken);
-      user.passwordResetExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
-      await user.save();
-      try {
-        await sendPasswordResetEmail(user.email, user.name || user.email, rawToken);
-      } catch (e) {
-        console.warn("reset mail error:", e?.message || e);
-      }
+    const { email } = req.body || {};
+    const normalized = (email || "").toLowerCase().trim();
+
+    if (!normalized) {
+      return res.status(400).json({ message: "Email requerido" });
     }
-    return res.json({ message: "Si el email existe, te enviamos instrucciones." });
-  } catch {
-    return res.json({ message: "Si el email existe, te enviamos instrucciones." });
+
+    const user = await UserModel.findOne({ email: normalized });
+
+    // 🧩 Por seguridad: seguimos sin decir si existe o no
+    if (!user) {
+      return res.json({
+        message: "Si el email existe, te enviamos instrucciones.",
+      });
+    }
+
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    user.passwordResetTokenHash = hashToken(rawToken);
+    user.passwordResetExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+    await user.save();
+
+    try {
+      const result = await sendPasswordResetEmail(
+        user.email,
+        user.name || user.email,
+        rawToken
+      );
+      console.log("reset mail result:", result);
+    } catch (e) {
+      console.error("❌ reset mail error:", e?.message || e);
+      // 👇 AHORA SÍ devolvemos error si el mail falla
+      return res
+        .status(500)
+        .json({ message: "No pudimos enviar el correo. Probá más tarde." });
+    }
+
+    return res.json({
+      message: "Si el email existe, te enviamos instrucciones.",
+    });
+  } catch (e) {
+    console.error("❌ requestPasswordReset error:", e);
+    return res.status(500).json({ message: "Server error" });
   }
 }
+
 
 // POST /api/auth/password-reset/confirm { token, newPassword }
 export async function confirmPasswordReset(req, res) {

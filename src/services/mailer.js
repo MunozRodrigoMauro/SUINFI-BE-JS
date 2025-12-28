@@ -57,16 +57,25 @@ async function getTransporter() {
       port: cfg.SMTP_PORT,
       secure: cfg.SMTP_SECURE, // true para 465, false para 587 (STARTTLS)
       auth: { user: cfg.SMTP_USER, pass: cfg.SMTP_PASS },
+      // opcional si Hostinger jode con TLS:
+      // tls: { rejectUnauthorized: false },
     });
+
     try {
       await t.verify();
       console.log(
-        `✅ SMTP verificado (${cfg.SMTP_HOST}:${cfg.SMTP_PORT} ${cfg.SMTP_SECURE ? "secure" : "starttls"})`
+        `✅ SMTP verificado (${cfg.SMTP_HOST}:${cfg.SMTP_PORT} ${
+          cfg.SMTP_SECURE ? "secure" : "starttls"
+        })`
       );
       return t;
     } catch (e) {
-      console.error("❌ SMTP verify failed:", e?.message || e);
-      return null; // fuerza modo DEV
+      console.error(
+        "⚠️ SMTP verify failed (seguimos usando el transporter):",
+        e?.message || e
+      );
+      // 👇 IMPORTANTE: ya NO devolvemos null
+      return t;
     }
   })();
 
