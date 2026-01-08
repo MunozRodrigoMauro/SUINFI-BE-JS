@@ -6,6 +6,9 @@ import User from "../models/User.js";
 import Notification from "../models/Notification.js";
 import { notifyChatMessageDeferred } from "../services/notification.service.js";
 
+// 🆕 PUSH
+import { sendPushToUser } from "../services/push.service.js";
+
 /**
  * GET /api/chats
  * Lista mis chats con lastMessage y unreadCount
@@ -156,6 +159,21 @@ export const createMessage = async (req, res) => {
   // 🔔 Notificación diferida por email si el receptor no lee a tiempo
   const sender = await User.findById(me, "name email").lean();
   await notifyChatMessageDeferred({ messageDoc: message, sender, recipient: to });
+
+  // 🆕 PUSH: avisar al receptor (si tiene tokens)
+  try {
+    const fromName = sender?.name || "Nuevo mensaje";
+    const msgText =
+      message.text.length > 120 ? message.text.slice(0, 117) + "..." : message.text;
+
+    await sendPushToUser(String(to), {
+      title: fromName,
+      body: msgText,
+      data: { type: "message", chatId: String(id) },
+    });
+  } catch (e) {
+    console.warn("push chat message error:", e?.message || e);
+  }
 
   res.status(201).json({ message });
 };

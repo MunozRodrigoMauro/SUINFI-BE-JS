@@ -10,6 +10,9 @@ import {
   notifyBookingCanceledByPro,
 } from "../services/notification.service.js";
 
+// 🆕 PUSH
+import { sendPushToUser } from "../services/push.service.js";
+
 /* Utils */
 const isValidId = (v) => mongoose.Types.ObjectId.isValid(String(v));
 const toISOZ = (date, time) => {
@@ -140,6 +143,22 @@ export const createBooking = async (req, res) => {
       await notifyBookingCreated({ booking: saved });
     } catch (e) {
       console.warn("notifyBookingCreated error:", e?.message || e);
+    }
+
+    // 🆕 PUSH: avisar al profesional
+    try {
+      const proUserId = saved?.professional?.user?._id || saved?.professional?.user;
+      const clientName = saved?.client?.name || "Cliente";
+      const serviceName = saved?.service?.name || "Servicio";
+      const title = isImmediate ? "Nueva Reserva Inmediata" : "Nueva Reserva";
+      const body = `${clientName} solicitó: ${serviceName}`;
+      await sendPushToUser(String(proUserId), {
+        title,
+        body,
+        data: { type: "booking", bookingId: String(saved._id) },
+      });
+    } catch (e) {
+      console.warn("push booking created error:", e?.message || e);
     }
 
     // 🔌 Opcional (no rompe nada): avisar por Socket.IO a dashboards
@@ -303,6 +322,62 @@ export const updateBookingStatus = async (req, res) => {
       }
     } catch (e) {
       console.warn("notifyBookingCanceled* error:", e?.message || e);
+    }
+
+    // 🆕 PUSH: avisos por cambios de estado (sin romper el flujo)
+    try {
+      const clientUserId = populated?.client?._id || populated?.client;
+      const proUserId = populated?.professional?.user?._id || populated?.professional?.user;
+
+      const clientName = populated?.client?.name || "Cliente";
+      const proName = populated?.professional?.user?.name || "Profesional";
+      const serviceName = populated?.service?.name || "Servicio";
+
+      if (status === "accepted") {
+        await sendPushToUser(String(clientUserId), {
+          title: "Reserva Aceptada",
+          body: `${proName} aceptó tu reserva: ${serviceName}`,
+          data: { type: "booking", bookingId: String(populated._id) },
+        });
+      }
+
+      if (status === "rejected") {
+        await sendPushToUser(String(clientUserId), {
+          title: "Reserva Rechazada",
+          body: `${proName} rechazó tu reserva: ${serviceName}`,
+          data: { type: "booking", bookingId: String(populated._id) },
+        });
+      }
+
+      if (status === "completed") {
+        await sendPushToUser(String(clientUserId), {
+          title: "Reserva Completada",
+          body: `Tu reserva con ${proName} fue marcada como completada.`,
+          data: { type: "booking", bookingId: String(populated._id) },
+        });
+      }
+
+      if (status === "canceled") {
+        // Si canceló el cliente → avisar al profesional
+        if (isClient) {
+          await sendPushToUser(String(proUserId), {
+            title: "Reserva Cancelada",
+            body: `${clientName} canceló la reserva: ${serviceName}`,
+            data: { type: "booking", bookingId: String(populated._id) },
+          });
+        }
+
+        // Si canceló el profesional (por reglas actuales acá no entra, pero lo dejamos por robustez)
+        if (isPro) {
+          await sendPushToUser(String(clientUserId), {
+            title: "Reserva Cancelada",
+            body: `${proName} canceló tu reserva: ${serviceName}`,
+            data: { type: "booking", bookingId: String(populated._id) },
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("push booking status error:", e?.message || e);
     }
 
     // 🔌 Opcional: evento Socket.IO para refrescar listados

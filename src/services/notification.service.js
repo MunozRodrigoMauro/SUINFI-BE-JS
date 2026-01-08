@@ -1,3 +1,4 @@
+//src/services/notification.service.js
 import Notification from "../models/Notification.js";
 import User from "../models/User.js";
 import Message from "../models/Message.js";
@@ -83,7 +84,7 @@ export async function queueNotification({
   metadata = {},
   notBefore = new Date(),
 }) {
-  return await Notification.create({
+  const notif = await Notification.create({
     recipient,
     type,
     subject: subject || `Notificación`,
@@ -93,6 +94,23 @@ export async function queueNotification({
     channel: "email",
     status: "pending",
   });
+
+  // 🔔 CAMBIO CUYIT: emitir evento realtime al crear notificación
+  try {
+    const io = global.io;
+    if (io && recipient) {
+      io.to(String(recipient)).emit("notification:new", {
+        id: String(notif._id),
+        type: notif.type,
+        createdAt: notif.createdAt,
+      });
+    }
+  } catch (e) {
+    console.warn("⚠️ notification socket emit failed:", e);
+  }
+  // 🔔 FIN CAMBIO CUYIT
+
+  return notif;
 }
 
 /* ------------------------ BOOKING ------------------------ */
@@ -106,7 +124,6 @@ export async function notifyBookingCreated({ booking }) {
   const clientName = booking?.client?.name || "Cliente";
   const serviceName = booking?.service?.name || "Servicio";
 
-  // detectamos inmediata también por nota
   const noteLower = String(booking?.note || "").toLowerCase();
   const isImmediate =
     booking?.isImmediate === true ||
@@ -230,7 +247,6 @@ export async function notifyChatMessageDeferred({ messageDoc, sender, recipient 
 
 /* ------------- Dispatcher helper (usado por cron) ------------- */
 export async function dispatchEmailForNotification(notif) {
-  // Mensajes: no enviar si ya fue leído
   if (notif.type === "message" && notif?.metadata?.messageId) {
     const msg = await Message.findById(notif.metadata.messageId).lean();
     if (!msg) {
@@ -246,14 +262,12 @@ export async function dispatchEmailForNotification(notif) {
     }
   }
 
-  // vamos a necesitar estos dos más abajo
   let bookingDoc = null;
   let effectiveIsImmediate = !!notif?.metadata?.isImmediate;
 
-  // Bookings: no enviar si el pro ya aceptó/rechazó
   if (notif.type === "booking" && notif?.metadata?.bookingId) {
     const b = await Booking.findById(notif.metadata.bookingId).lean();
-    bookingDoc = b; // lo guardamos para abajo
+    bookingDoc = b;
     if (!b) {
       await Notification.findByIdAndUpdate(notif._id, { status: "skipped" });
       return { skipped: true, reason: "booking_not_found" };
@@ -268,7 +282,6 @@ export async function dispatchEmailForNotification(notif) {
       }
     }
 
-    // [CAMBIO DISPATCHER] recalcular si era inmediata mirando el booking real
     if (!effectiveIsImmediate) {
       const noteLower = String(b.note || "").toLowerCase();
       if (b.isImmediate === true || noteLower.includes("reserva inmediata")) {
@@ -277,14 +290,12 @@ export async function dispatchEmailForNotification(notif) {
     }
   }
 
-  // destinatario
   const user = await User.findById(notif.recipient, "email name").lean();
   if (!user?.email) {
     await Notification.findByIdAndUpdate(notif._id, { status: "skipped" });
     return { skipped: true, reason: "no_email" };
   }
 
-  // CTA con redirect
   let redirectPath = "/dashboard";
   if (notif.type === "booking" && notif?.metadata?.bookingId) {
     redirectPath = `/bookings/${notif.metadata.bookingId}`;
@@ -295,7 +306,6 @@ export async function dispatchEmailForNotification(notif) {
     redirectPath
   )}`;
 
-  // Cuerpo HTML
   let bodyHtml = null;
 
   if (notif.type === "booking" && notif?.metadata?.kind === "created") {
@@ -345,7 +355,6 @@ export async function dispatchEmailForNotification(notif) {
       </div>`;
   }
 
-  // [CAMBIO DISPATCHER] si al final resultó ser inmediata, forzamos el asunto
   let subjectToSend = notif.subject || `Notificación`;
   if (
     notif.type === "booking" &&

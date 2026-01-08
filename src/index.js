@@ -1,3 +1,4 @@
+//src/index.js
 import path from "path";
 import fs from "fs";
 import cors from "cors";
@@ -105,6 +106,9 @@ const io = new SocketIOServer(httpServer, {
   pingTimeout: 20000,
   pingInterval: 25000,
 });
+
+// 🔔 CAMBIO CUYIT: exponer io global para servicios (notifications, etc)
+global.io = io;
 
 app.set("io", io);
 

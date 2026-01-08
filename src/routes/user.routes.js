@@ -9,6 +9,8 @@ import {
   deleteUser,
   uploadMyAvatar,
   deleteMyAvatar,
+  addMyPushToken,
+  removeMyPushToken,
 } from "../controllers/user.controller.js";
 
 import { userValidationRules } from "../middlewares/user.validator.js";
@@ -36,6 +38,10 @@ router.get("/", verifyToken, isAdmin, getUsers);
 // Mi usuario
 router.get("/me", verifyToken, getMe);
 router.patch("/me", verifyToken, updateMe);
+
+// 🆕 PUSH token
+router.post("/me/push-token", verifyToken, addMyPushToken);
+router.delete("/me/push-token", verifyToken, removeMyPushToken);
 
 // Avatar (ambos métodos por si alguno lo usás desde Postman/FE)
 router.post("/me/avatar", verifyToken, uploadAvatar, uploadMyAvatar);

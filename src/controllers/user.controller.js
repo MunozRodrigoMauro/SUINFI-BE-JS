@@ -371,3 +371,51 @@ export const deleteMyAvatar = async (req, res) => {
     return res.status(500).json({ message: "Error del servidor" });
   }
 };
+
+// 🆕 PUSH: guardar token Expo para el usuario logueado
+export const addMyPushToken = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ message: "No autorizado" });
+
+    const token = String(req.body?.token || "").trim();
+    if (!token) return res.status(400).json({ message: "Missing token" });
+
+    const isExpo =
+      token.startsWith("ExponentPushToken[") || token.startsWith("ExpoPushToken[");
+    if (!isExpo) {
+      return res.status(400).json({ message: "INVALID_PUSH_TOKEN" });
+    }
+
+    await UserModel.updateOne(
+      { _id: userId },
+      { $addToSet: { expoPushTokens: token } }
+    );
+
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error("addMyPushToken error:", e);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// 🆕 PUSH: eliminar token Expo (logout / desinstalación / refresh)
+export const removeMyPushToken = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ message: "No autorizado" });
+
+    const token = String(req.body?.token || "").trim();
+    if (!token) return res.status(400).json({ message: "Missing token" });
+
+    await UserModel.updateOne(
+      { _id: userId },
+      { $pull: { expoPushTokens: token } }
+    );
+
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error("removeMyPushToken error:", e);
+    return res.status(500).json({ message: "Server error" });
+  }
+};

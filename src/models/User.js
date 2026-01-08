@@ -83,6 +83,9 @@ const userSchema = new mongoose.Schema(
     // 🆕 OAuth
     googleId: { type: String, index: true, sparse: true, default: null },
     authProvider: { type: String, enum: ["local", "google"], default: "local" },
+
+    // 🆕 PUSH (Expo)
+    expoPushTokens: { type: [String], default: [] },
   },
   { timestamps: true }
 );
