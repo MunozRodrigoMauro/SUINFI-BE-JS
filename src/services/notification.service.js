@@ -237,6 +237,7 @@ export async function notifyChatMessageDeferred({ messageDoc, sender, recipient 
     message,
     metadata: {
       chatId: String(messageDoc.chat),
+      otherUserId: String(sender?._id || sender),
       messageId: String(messageDoc._id),
       fromUserId: String(sender?._id || sender),
       fromName: textSender,

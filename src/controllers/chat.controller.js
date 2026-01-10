@@ -4,10 +4,41 @@ import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
 import Notification from "../models/Notification.js";
+import Professional from "../models/Professional.js";
+import ProfessionalModel from "../models/Professional.js";
+import Client from "../models/Client.js";
 import { notifyChatMessageDeferred } from "../services/notification.service.js";
 
 // 🆕 PUSH
 import { sendPushToUser } from "../services/push.service.js";
+
+/**
+ * Helper: resolver avatar por userId
+ * - 1) User.avatarUrl
+ * - 2) si es professional -> Professional.avatarUrl
+ * - 3) si es user -> Client.avatarUrl (si existe en tu schema; si no, no jode)
+ */
+async function resolveAvatarForUser(userLean) {
+  if (!userLean?._id) return "";
+  const base = String(userLean.avatarUrl || "").trim();
+  if (base) return base;
+
+  // Si el otro es profesional, a veces el avatar está en Professional
+  if (userLean.role === "professional") {
+    const prof = await Professional.findOne({ user: userLean._id }, "avatarUrl").lean();
+    const a = String(prof?.avatarUrl || "").trim();
+    if (a) return a;
+  }
+
+  // Si el otro es user y tu Client tiene avatarUrl (si no existe, queda vacío)
+  if (userLean.role === "user") {
+    const cli = await Client.findOne({ user: userLean._id }, "avatarUrl").lean();
+    const a = String(cli?.avatarUrl || "").trim();
+    if (a) return a;
+  }
+
+  return "";
+}
 
 /**
  * GET /api/chats
@@ -18,7 +49,6 @@ export const listMyChats = async (req, res) => {
 
   const chats = await Conversation.find({ participants: me })
     .sort({ updatedAt: -1 })
-    // [CHANGE] incluir readAt en el lastMessage para que el FE pueda decidir leído/no leído por chat
     .populate({ path: "lastMessage", select: "text createdAt from to readAt" })
     .lean();
 
@@ -29,8 +59,21 @@ export const listMyChats = async (req, res) => {
       if (String(p) !== String(me)) ids.add(String(p));
     })
   );
-  const others = await User.find({ _id: { $in: [...ids] } }, "name email role avatarUrl").lean();
-  const map = new Map(others.map(u => [String(u._id), u]));
+
+  const others = await User.find(
+    { _id: { $in: [...ids] } },
+    "name email role avatarUrl"
+  ).lean();
+
+  // ✅ Asegurar avatarUrl aunque esté en Professional/Client
+  const othersFixed = await Promise.all(
+    others.map(async u => {
+      const avatarUrl = await resolveAvatarForUser(u);
+      return { ...u, avatarUrl };
+    })
+  );
+
+  const map = new Map(othersFixed.map(u => [String(u._id), u]));
 
   // unread por chat
   const unreadCounts = await Message.aggregate([
@@ -43,7 +86,7 @@ export const listMyChats = async (req, res) => {
     const otherId = String(c.participants.find(p => String(p) !== String(me)));
     return {
       _id: c._id,
-      otherUser: map.get(otherId) || { _id: otherId },
+      otherUser: map.get(otherId) || { _id: otherId, avatarUrl: "" },
       lastMessage: c.lastMessage
         ? {
             _id: c.lastMessage._id,
@@ -51,7 +94,6 @@ export const listMyChats = async (req, res) => {
             from: c.lastMessage.from,
             to: c.lastMessage.to,
             createdAt: c.lastMessage.createdAt,
-            // [CHANGE] exponer readAt al FE
             readAt: c.lastMessage.readAt,
           }
         : null,
@@ -77,11 +119,19 @@ export const getOrCreateWithOther = async (req, res) => {
     return res.status(400).json({ message: "No podés chatear con vos mismo" });
   }
 
-  // Asegurar que exista el otro usuario
-  const other = await User.findById(otherUserId, "name email role avatarUrl");
+  // User del otro (incluye avatarUrl)
+  const other = await User.findById(otherUserId, "name email role avatarUrl").lean();
   if (!other) return res.status(404).json({ message: "Destinatario no existe" });
 
-  // Buscar o crear la conversacion en **Conversation**
+  // Avatar fallback (si es profesional y en User está vacío)
+  let avatarUrl = other?.avatarUrl ? String(other.avatarUrl) : "";
+
+  if (!avatarUrl && other.role === "professional") {
+    const pro = await ProfessionalModel.findOne({ user: otherUserId }, "avatarUrl").lean();
+    if (pro?.avatarUrl) avatarUrl = String(pro.avatarUrl);
+  }
+
+  // Buscar o crear conversación
   let chat = await Conversation.findOne({
     participants: { $all: [me, otherUserId] },
   });
@@ -90,15 +140,25 @@ export const getOrCreateWithOther = async (req, res) => {
     chat = await Conversation.create({ participants: [me, otherUserId] });
   }
 
-  // Traer últimos mensajes (orden ascendente)
-  const messages = await Message.find({ chat: chat._id }).sort({ createdAt: 1 }).lean();
+  // Mensajes (asc)
+  const messages = await Message.find({ chat: chat._id })
+    .sort({ createdAt: 1 })
+    .lean();
 
-  res.json({
+  return res.json({
     chat,
     messages,
-    otherUser: { _id: other._id, name: other.name, email: other.email, role: other.role },
+    otherUser: {
+      _id: other._id,
+      name: other.name,
+      email: other.email,
+      role: other.role,
+      avatarUrl, // ✅ SIEMPRE viene (aunque sea "")
+    },
   });
 };
+
+
 
 /**
  * GET /api/chats/:id/messages?limit=&before=
@@ -152,15 +212,13 @@ export const createMessage = async (req, res) => {
   await chat.save();
 
   const io = req.app.get("io");
-  // ⬇️ IMPORTANTE: tus sockets se unen a la room con el **userId plano**
   io?.to(String(to)).emit("chat:message", { chatId: String(id), message });
   io?.to(String(me)).emit("chat:message", { chatId: String(id), message });
 
-  // 🔔 Notificación diferida por email si el receptor no lee a tiempo
   const sender = await User.findById(me, "name email").lean();
   await notifyChatMessageDeferred({ messageDoc: message, sender, recipient: to });
 
-  // 🆕 PUSH: avisar al receptor (si tiene tokens)
+  // 🆕 PUSH
   try {
     const fromName = sender?.name || "Nuevo mensaje";
     const msgText =
@@ -169,7 +227,7 @@ export const createMessage = async (req, res) => {
     await sendPushToUser(String(to), {
       title: fromName,
       body: msgText,
-      data: { type: "message", chatId: String(id) },
+      data: { type: "message", chatId: String(id), otherUserId: String(me) }
     });
   } catch (e) {
     console.warn("push chat message error:", e?.message || e);
@@ -195,7 +253,6 @@ export const markAsRead = async (req, res) => {
     { $set: { readAt: new Date() } }
   );
 
-  // 🧹 Cancela/transforma notifs pendientes de este chat para este usuario
   await Notification.updateMany(
     { recipient: me, type: "message", "metadata.chatId": String(id), status: "pending" },
     { $set: { status: "read", read: true } }
