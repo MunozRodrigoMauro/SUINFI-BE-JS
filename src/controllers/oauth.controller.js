@@ -16,15 +16,16 @@ import {
 const {
   JWT_SECRET,
   JWT_EXPIRES_IN,
-  APP_PUBLIC_URL,    // 🛠 CAMBIO: usamos esta var (es la que tenés en .env del backend)
-  WEB_APP_URL,       // soportamos también por compatibilidad
-  FRONTEND_URL,      // soportamos también por compatibilidad
+  APP_PUBLIC_URL, // 🛠 CAMBIO: usamos esta var (es la que tenés en .env del backend)
+  WEB_APP_URL, // soportamos también por compatibilidad
+  FRONTEND_URL, // soportamos también por compatibilidad
 } = process.env;
 
 // 🛠 CAMBIO: Base del frontend, sin slash final. Fallback a prod seguro.
-const FE_BASE =
-  (APP_PUBLIC_URL || WEB_APP_URL || FRONTEND_URL || "https://www.cuyit.com")
-    .replace(/\/+$/, "");
+const FE_BASE = (APP_PUBLIC_URL || WEB_APP_URL || FRONTEND_URL || "https://www.cuyit.com").replace(
+  /\/+$/,
+  ""
+);
 
 function issueJwtForUser(user) {
   return jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, {
@@ -32,7 +33,38 @@ function issueJwtForUser(user) {
   });
 }
 
-function redirectToFE(res, params) {
+// 🛠 CAMBIO (NUEVO): permitir deep link mobile con host oauth
+function isAllowedMobileRedirect(next) {
+  try {
+    const url = new URL(String(next || "").trim());
+    const protocol = (url.protocol || "").toLowerCase();
+    const host = (url.host || "").toLowerCase();
+
+    // Permitimos solo nuestro esquema y host esperado para evitar open-redirect
+    if (protocol !== "cuyitmobile:") return false;
+    if (host !== "oauth") return false;
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// 🛠 CAMBIO (MODIF): ahora redirectToFE usa `next` si es deep link permitido, si no cae a FE_BASE web.
+function redirectToFE(res, params, nextUrl) {
+  try {
+    const next = String(nextUrl || "").trim();
+    if (next && isAllowedMobileRedirect(next)) {
+      const url = new URL(next);
+      Object.entries(params || {}).forEach(([k, v]) => {
+        if (v != null) url.searchParams.set(k, String(v));
+      });
+      return res.redirect(url.toString());
+    }
+  } catch {
+    // noop -> fallback web
+  }
+
   const url = new URL("/oauth/google/callback", FE_BASE);
   Object.entries(params || {}).forEach(([k, v]) => {
     if (v != null) url.searchParams.set(k, String(v));
@@ -72,7 +104,7 @@ export async function googleCallback(req, res) {
     const { code, state } = req.query || {};
     const parsed = verifyAndDecodeState(state);
     if (!parsed) {
-      return redirectToFE(res, { error: "OAUTH_STATE_INVALID" });
+      return redirectToFE(res, { error: "OAUTH_STATE_INVALID" }, "");
     }
 
     const { intent, role, next = "" } = parsed;
@@ -82,7 +114,7 @@ export async function googleCallback(req, res) {
     try {
       tokens = await getTokens({ code });
     } catch {
-      return redirectToFE(res, { error: "OAUTH_TOKEN_EXCHANGE_FAILED", role });
+      return redirectToFE(res, { error: "OAUTH_TOKEN_EXCHANGE_FAILED", role }, next);
     }
 
     // 2) Userinfo
@@ -90,7 +122,7 @@ export async function googleCallback(req, res) {
     try {
       gUser = await getGoogleUser(tokens.id_token, tokens.access_token);
     } catch {
-      return redirectToFE(res, { error: "OAUTH_USERINFO_FAILED", role });
+      return redirectToFE(res, { error: "OAUTH_USERINFO_FAILED", role }, next);
     }
 
     const email = (gUser?.email || "").toLowerCase();
@@ -99,7 +131,7 @@ export async function googleCallback(req, res) {
     const displayName = gUser?.name || email;
 
     if (!email || !googleId) {
-      return redirectToFE(res, { error: "OAUTH_USERINFO_FAILED", role });
+      return redirectToFE(res, { error: "OAUTH_USERINFO_FAILED", role }, next);
     }
 
     const existing = await UserModel.findOne({ email });
@@ -107,10 +139,10 @@ export async function googleCallback(req, res) {
     if (intent === "login") {
       // sin auto-provisión
       if (!existing) {
-        return redirectToFE(res, { error: "ACCOUNT_NOT_FOUND_FOR_ROLE", role });
+        return redirectToFE(res, { error: "ACCOUNT_NOT_FOUND_FOR_ROLE", role }, next);
       }
       if (existing.role !== role) {
-        return redirectToFE(res, { error: "ROLE_CONFLICT", role: existing.role });
+        return redirectToFE(res, { error: "ROLE_CONFLICT", role: existing.role }, next);
       }
 
       // Linkear googleId si faltaba y marcar verificado si Google lo confirma
@@ -127,16 +159,15 @@ export async function googleCallback(req, res) {
       if (mustSave) await existing.save();
 
       const token = issueJwtForUser(existing);
-      // 🛠 CAMBIO: incluimos role también en éxito (opcional, no rompe FE)
-      return redirectToFE(res, { token, next, role });
+      return redirectToFE(res, { token, next, role }, next);
     }
 
     // intent === "register"
     if (existing) {
       if (existing.role !== role) {
-        return redirectToFE(res, { error: "ROLE_CONFLICT", role: existing.role });
+        return redirectToFE(res, { error: "ROLE_CONFLICT", role: existing.role }, next);
       } else {
-        return redirectToFE(res, { error: "EMAIL_ALREADY_REGISTERED", role: existing.role });
+        return redirectToFE(res, { error: "EMAIL_ALREADY_REGISTERED", role: existing.role }, next);
       }
     }
 
@@ -155,9 +186,8 @@ export async function googleCallback(req, res) {
     await ensureProfileByRole(newUser);
 
     const token = issueJwtForUser(newUser);
-    // 🛠 CAMBIO: incluimos role también en éxito (opcional)
-    return redirectToFE(res, { token, next, role });
+    return redirectToFE(res, { token, next, role }, next);
   } catch {
-    return redirectToFE(res, { error: "OAUTH_UNEXPECTED" });
+    return redirectToFE(res, { error: "OAUTH_UNEXPECTED" }, "");
   }
 }

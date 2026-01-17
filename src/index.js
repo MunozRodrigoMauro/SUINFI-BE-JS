@@ -43,15 +43,15 @@ import whatsappRoutes from "./routes/whatsapp.routes.js";
 
 dotenv.config();
 
-import UserModel from "./models/User.js";
-import bcrypt from "bcrypt";
-import crypto from "crypto";
-import { ensureProfileByRole } from "./services/ensureProfile.js";
-import {
-  getGoogleAuthURL,
-  getTokens,
-  getGoogleUser,
-} from "./services/googleOAuth.js";
+// import UserModel from "./models/User.js";
+// import bcrypt from "bcrypt";
+// import crypto from "crypto";
+// import { ensureProfileByRole } from "./services/ensureProfile.js";
+// import {
+//   getGoogleAuthURL,
+//   getTokens,
+//   getGoogleUser,
+// } from "./services/googleOAuth.js";
 
 const app = express();
 app.use(express.json());
@@ -226,74 +226,74 @@ app.use("/api/points", pointsRoutes);
 
 
 // OAuth Google
-app.get("/api/auth/google", (req, res) => {
-  const next =
-    typeof req.query.next === "string" && req.query.next ? req.query.next : "";
-  const url = getGoogleAuthURL(next);
-  return res.redirect(url);
-});
+// app.get("/api/auth/google", (req, res) => {
+//   const next =
+//     typeof req.query.next === "string" && req.query.next ? req.query.next : "";
+//   const url = getGoogleAuthURL(next);
+//   return res.redirect(url);
+// });
 
-app.get("/api/auth/google/callback", async (req, res) => {
-  try {
-    const { code, state } = req.query;
-    if (!code) return res.status(400).send("Missing code");
+// app.get("/api/auth/google/callback", async (req, res) => {
+//   try {
+//     const { code, state } = req.query;
+//     if (!code) return res.status(400).send("Missing code");
 
-    let next = "/dashboard/user";
-    if (state) {
-      try {
-        const decoded = JSON.parse(Buffer.from(String(state), "base64url").toString());
-        if (decoded?.next && typeof decoded.next === "string") next = decoded.next;
-      } catch {}
-    }
+//     let next = "/dashboard/user";
+//     if (state) {
+//       try {
+//         const decoded = JSON.parse(Buffer.from(String(state), "base64url").toString());
+//         if (decoded?.next && typeof decoded.next === "string") next = decoded.next;
+//       } catch {}
+//     }
 
-    const { id_token, access_token } = await getTokens({ code });
-    const g = await getGoogleUser(id_token, access_token);
-    const { sub, email, name, picture, email_verified } = g || {};
+//     const { id_token, access_token } = await getTokens({ code });
+//     const g = await getGoogleUser(id_token, access_token);
+//     const { sub, email, name, picture, email_verified } = g || {};
 
-    if (!email) return res.status(400).send("Google account without email");
+//     if (!email) return res.status(400).send("Google account without email");
 
-    let user = await UserModel.findOne({ email });
+//     let user = await UserModel.findOne({ email });
 
-    if (!user) {
-      const randomPass = crypto.randomBytes(24).toString("hex");
-      const hashed = await bcrypt.hash(randomPass, 10);
-      user = await UserModel.create({
-        name: name || email.split("@")[0],
-        email,
-        password: hashed,
-        role: "user",
-        verified: true,
-        avatarUrl: picture || "",
-        googleId: sub,
-        authProvider: "google",
-      });
-      await ensureProfileByRole(user);
-    } else {
-      const patch = {};
-      if (!user.googleId && sub) patch.googleId = sub;
-      if (email_verified && !user.verified) patch.verified = true;
-      if (!user.avatarUrl && picture) patch.avatarUrl = picture;
-      if (Object.keys(patch).length) {
-        user = await UserModel.findByIdAndUpdate(user._id, { $set: patch }, { new: true });
-      }
-    }
+//     if (!user) {
+//       const randomPass = crypto.randomBytes(24).toString("hex");
+//       const hashed = await bcrypt.hash(randomPass, 10);
+//       user = await UserModel.create({
+//         name: name || email.split("@")[0],
+//         email,
+//         password: hashed,
+//         role: "user",
+//         verified: true,
+//         avatarUrl: picture || "",
+//         googleId: sub,
+//         authProvider: "google",
+//       });
+//       await ensureProfileByRole(user);
+//     } else {
+//       const patch = {};
+//       if (!user.googleId && sub) patch.googleId = sub;
+//       if (email_verified && !user.verified) patch.verified = true;
+//       if (!user.avatarUrl && picture) patch.avatarUrl = picture;
+//       if (Object.keys(patch).length) {
+//         user = await UserModel.findByIdAndUpdate(user._id, { $set: patch }, { new: true });
+//       }
+//     }
 
-    const token = jwt.sign(
-      { id: user._id.toString(), role: user.role },
-      process.env.JWT_SECRET || "changeme",
-      { expiresIn: process.env.JWT_EXPIRES_IN || "30d" }
-    );
+//     const token = jwt.sign(
+//       { id: user._id.toString(), role: user.role },
+//       process.env.JWT_SECRET || "changeme",
+//       { expiresIn: process.env.JWT_EXPIRES_IN || "30d" }
+//     );
 
-    const appUrl = process.env.APP_PUBLIC_URL || "http://localhost:5173";
-    const redirectUrl = `${appUrl}/oauth/google/callback?token=${encodeURIComponent(
-      token
-    )}&next=${encodeURIComponent(next)}`;
-    return res.redirect(redirectUrl);
-  } catch (e) {
-    console.error("Google OAuth callback error:", e);
-    return res.status(500).send("Google sign-in failed");
-  }
-});
+//     const appUrl = process.env.APP_PUBLIC_URL || "http://localhost:5173";
+//     const redirectUrl = `${appUrl}/oauth/google/callback?token=${encodeURIComponent(
+//       token
+//     )}&next=${encodeURIComponent(next)}`;
+//     return res.redirect(redirectUrl);
+//   } catch (e) {
+//     console.error("Google OAuth callback error:", e);
+//     return res.status(500).send("Google sign-in failed");
+//   }
+// });
 
 app.get("/", (_req, res) => {
   res.send("Bienvenido a la API de CuyIT 🎯");

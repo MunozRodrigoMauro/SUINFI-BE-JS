@@ -24,6 +24,7 @@ const toBase64Url = (buf) =>
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/g, "");
+
 const fromBase64Url = (str) =>
   Buffer.from(str.replace(/-/g, "+").replace(/_/g, "/"), "base64");
 
@@ -37,21 +38,47 @@ function signState(payloadObj) {
   return `${b64}.${sig}`;
 }
 
+// 🛠 CAMBIO: compatibilidad hacia atrás (si te llaman con string)
+function normalizeArgs(arg) {
+  if (typeof arg === "string") {
+    return { next: arg, intent: "login", role: "user" };
+  }
+  if (!arg || typeof arg !== "object") {
+    return { next: "", intent: "login", role: "user" };
+  }
+
+  const next = typeof arg.next === "string" ? arg.next : "";
+  const intent = typeof arg.intent === "string" ? arg.intent : "login";
+  const role = typeof arg.role === "string" ? arg.role : "user";
+
+  return { next, intent, role };
+}
+
 export function verifyAndDecodeState(state) {
   try {
     const secret = OAUTH_STATE_SECRET || JWT_SECRET || "dev_fallback_state_secret";
-    if (!state || !state.includes(".")) return null;
-    const [b64, sig] = state.split(".");
+    if (!state || !String(state).includes(".")) return null;
+
+    const parts = String(state).split(".");
+    if (parts.length !== 2) return null;
+
+    const b64 = parts[0];
+    const sig = parts[1];
+
     const expected = toBase64Url(
       crypto.createHmac("sha256", secret).update(b64).digest()
     );
     if (sig !== expected) return null;
+
     const json = fromBase64Url(b64).toString("utf8");
     const obj = JSON.parse(json);
+
     // Validaciones mínimas
+    if (!obj || typeof obj !== "object") return null;
     if (!obj.intent || !obj.role) return null;
     if (!["login", "register"].includes(obj.intent)) return null;
     if (!["user", "professional"].includes(obj.role)) return null;
+
     return obj;
   } catch {
     return null;
@@ -59,7 +86,9 @@ export function verifyAndDecodeState(state) {
 }
 
 // 🛠 CAMBIO: URL builder acepta intent/role/next y firma state
-export function getGoogleAuthURL({ next = "", intent, role }) {
+export function getGoogleAuthURL(arg) {
+  const { next = "", intent, role } = normalizeArgs(arg);
+
   const root = "https://accounts.google.com/o/oauth2/v2/auth";
   const nonce = crypto.randomBytes(16).toString("hex"); // anti-replay básico
   const state = signState({ next, intent, role, nonce });
