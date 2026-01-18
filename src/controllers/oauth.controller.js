@@ -142,7 +142,16 @@ export async function googleCallback(req, res) {
         return redirectToFE(res, { error: "ACCOUNT_NOT_FOUND_FOR_ROLE", role }, next);
       }
       if (existing.role !== role) {
-        return redirectToFE(res, { error: "ROLE_CONFLICT", role: existing.role }, next);
+        // 🛠 CAMBIO: mandamos requestedRole + actualRole para que el mobile muestre mensaje claro
+        return redirectToFE(
+          res,
+          {
+            error: "ROLE_CONFLICT",
+            requestedRole: role,
+            actualRole: existing.role,
+          },
+          next
+        );
       }
 
       // Linkear googleId si faltaba y marcar verificado si Google lo confirma
@@ -165,7 +174,16 @@ export async function googleCallback(req, res) {
     // intent === "register"
     if (existing) {
       if (existing.role !== role) {
-        return redirectToFE(res, { error: "ROLE_CONFLICT", role: existing.role }, next);
+        // 🛠 CAMBIO: mandamos requestedRole + actualRole para que el mobile muestre mensaje claro
+        return redirectToFE(
+          res,
+          {
+            error: "ROLE_CONFLICT",
+            requestedRole: role,
+            actualRole: existing.role,
+          },
+          next
+        );
       } else {
         return redirectToFE(res, { error: "EMAIL_ALREADY_REGISTERED", role: existing.role }, next);
       }

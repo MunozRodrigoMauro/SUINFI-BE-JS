@@ -6,6 +6,7 @@ import {
   getUsers,
   getMe,
   updateMe,
+  deleteMe,
   deleteUser,
   uploadMyAvatar,
   deleteMyAvatar,
@@ -38,6 +39,9 @@ router.get("/", verifyToken, isAdmin, getUsers);
 // Mi usuario
 router.get("/me", verifyToken, getMe);
 router.patch("/me", verifyToken, updateMe);
+
+// 🗑️ Eliminar mi cuenta (self)
+router.delete("/me", verifyToken, deleteMe);
 
 // 🆕 PUSH token
 router.post("/me/push-token", verifyToken, addMyPushToken);

@@ -271,6 +271,26 @@ export const getMyProfile = async (req, res) => {
   }
 };
 
+// ✅ DELETE /api/users/me
+export const deleteMe = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    await Promise.all([
+      ProfessionalModel.deleteOne({ user: userId }),
+      ClientModel.deleteOne({ user: userId }),
+      AdminModel.deleteOne?.({ user: userId }) ?? Promise.resolve(),
+    ]);
+
+    await UserModel.findByIdAndDelete(userId);
+
+    return res.json({ message: "Cuenta eliminada" });
+  } catch (e) {
+    console.error("deleteMe error", e);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
 export const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
