@@ -1,3 +1,4 @@
+//src/models/Booking.js
 import mongoose from "mongoose";
 
 const bookingSchema = new mongoose.Schema(
@@ -25,6 +26,7 @@ const bookingSchema = new mongoose.Schema(
       type: String,
       enum: ["pending", "accepted", "rejected", "completed", "canceled"],
       default: "pending",
+      index: true,
     },
     note: {
       type: String,
@@ -42,6 +44,30 @@ const bookingSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
       index: true,
+    },
+
+    // ✅ [CAMBIO] metadata para SLA + fallback de inmediatas
+    immediate: {
+      firstOfferedAt: { type: Date, default: null },
+      currentOfferAt: { type: Date, default: null, index: true },
+      expiresAt: { type: Date, default: null, index: true },
+      offeredProfessionals: [{ type: mongoose.Schema.Types.ObjectId, ref: "Professional" }],
+      fallbackCount: { type: Number, default: 0 },
+      lastFallbackAt: { type: Date, default: null },
+      expiredAt: { type: Date, default: null },
+
+      // ✅ CAMBIO UBER: criterios usados para el matching (cercanía + filtros)
+      criteria: {
+        clientLocation: {
+          type: { type: String, enum: ["Point"], default: "Point" },
+          coordinates: { type: [Number], default: null }, // [lng, lat]
+        },
+        maxDistance: { type: Number, default: null }, // metros
+        requireCriminalRecord: { type: Boolean, default: true },
+        requireLicense: { type: Boolean, default: false },
+        minAverageRating: { type: Number, default: null },
+        minReviews: { type: Number, default: null },
+      },
     },
 
     // ⚠️ Importante: por default "not_required" para el flujo SIN seña
@@ -72,5 +98,9 @@ bookingSchema.index({
   scheduledAt: 1,
   status: 1,
 });
+
+// ✅ [CAMBIO] índices para cron inmediatas
+bookingSchema.index({ isImmediate: 1, status: 1, "immediate.currentOfferAt": 1 });
+bookingSchema.index({ isImmediate: 1, status: 1, "immediate.expiresAt": 1 });
 
 export default mongoose.model("Booking", bookingSchema);

@@ -32,6 +32,9 @@ import cron from "node-cron";
 import isNowWithinSchedule from "./utils/schedule.js";
 import { registerNotificationsCron } from "./utils/notifications-cron.js";
 
+// ✅ [CAMBIO] NUEVO CRON para reservas inmediatas (fallback + expiración)
+import { registerInstantBookingsCron } from "./utils/instant-bookings-cron.js";
+
 import ProfessionalModel from "./models/Professional.js";
 
 import { createServer } from "http";
@@ -124,6 +127,7 @@ function verifyTokenSafe(token) {
 }
 
 io.on("connection", (socket) => {
+  // eslint-disable-next-line no-console
   console.log("🔌 socket conectado:", socket.id);
 
   socket.on("joinUser", (payload) => {
@@ -136,11 +140,13 @@ io.on("connection", (socket) => {
       if (token) {
         const decoded = verifyTokenSafe(token);
         if (!decoded) {
+          // eslint-disable-next-line no-console
           console.warn("joinUser: token inválido");
           return;
         }
         if (!userId) userId = decoded.id || decoded._id;
         if ((decoded.id || decoded._id) && userId && (decoded.id || decoded._id) !== userId) {
+          // eslint-disable-next-line no-console
           console.warn("joinUser: userId no coincide con token");
           return;
         }
@@ -164,8 +170,10 @@ io.on("connection", (socket) => {
         at: new Date().toISOString(),
       });
 
+      // eslint-disable-next-line no-console
       console.log(`✅ Socket ${socket.id} unido a room de usuario ${userId}`);
     } catch (e) {
+      // eslint-disable-next-line no-console
       console.error("joinUser error:", e);
     }
   });
@@ -173,16 +181,19 @@ io.on("connection", (socket) => {
   socket.on("joinRoom", (room) => {
     if (!room) return;
     socket.join(room);
+    // eslint-disable-next-line no-console
     console.log(`➡️  ${socket.id} join -> ${room}`);
   });
 
   socket.on("leaveRoom", (room) => {
     if (!room) return;
     socket.leave(room);
+    // eslint-disable-next-line no-console
     console.log(`⬅️  ${socket.id} leave -> ${room}`);
   });
 
   socket.on("debugRooms", () => {
+    // eslint-disable-next-line no-console
     console.log("Rooms del socket", socket.id, "->", socket.rooms);
   });
 
@@ -203,6 +214,7 @@ io.on("connection", (socket) => {
         });
       }
     }
+    // eslint-disable-next-line no-console
     console.log("🔌 socket desconectado:", socket.id, "motivo:", reason);
   });
 });
@@ -332,41 +344,51 @@ mongoose
     startCleanupUnpaid();
     startCleanupUnpaidPrebookings();
 
+    // ✅ [CAMBIO] activar cron reservas inmediatas (fallback 5min + expire 15min)
+    registerInstantBookingsCron(io);
+
     cron.schedule("* * * * *", async () => {
-  try {
-    const pros = await ProfessionalModel.find(
-      { availabilityStrategy: "schedule" },
-      { _id: 1, user: 1, isAvailableNow: 1, availabilitySchedule: 1 }
-    );
+      try {
+        const now = new Date();
 
-    for (const p of pros) {
-      const shouldBeOn = isNowWithinSchedule(p.availabilitySchedule);
-
-      if (p.isAvailableNow !== shouldBeOn) {
-        await ProfessionalModel.updateOne(
-          { _id: p._id },
-          { $set: { isAvailableNow: shouldBeOn } },
-          { timestamps: false }
+        const pros = await ProfessionalModel.find(
+          { availabilityStrategy: "schedule" },
+          { _id: 1, user: 1, isAvailableNow: 1, availabilitySchedule: 1, instantSuspendedUntil: 1 }
         );
 
-        io.emit("availability:update", {
-          userId: p.user.toString(),
-          isAvailableNow: shouldBeOn,
-          at: new Date().toISOString(),
-        });
+        for (const p of pros) {
+          const isSuspended =
+            p.instantSuspendedUntil &&
+            new Date(p.instantSuspendedUntil).getTime() > now.getTime();
+
+          const shouldBeOn = isSuspended ? false : isNowWithinSchedule(p.availabilitySchedule);
+
+          if (p.isAvailableNow !== shouldBeOn) {
+            await ProfessionalModel.updateOne(
+              { _id: p._id },
+              { $set: { isAvailableNow: shouldBeOn } },
+              { timestamps: false }
+            );
+
+            io.emit("availability:update", {
+              userId: p.user.toString(),
+              isAvailableNow: shouldBeOn,
+              at: new Date().toISOString(),
+            });
+          }
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error("Cron availability error:", e);
       }
-    }
-  } catch (e) {
-    console.error("Cron availability error:", e);
-  }
-});
+    });
 
     httpServer.listen(PORT, () => {
+      // eslint-disable-next-line no-console
       console.log(`✅ Servidor corriendo en http://localhost:${PORT}`);
     });
   })
   .catch((err) => {
+    // eslint-disable-next-line no-console
     console.error("❌ Error al conectar a Mongo:", err);
   });
-
-

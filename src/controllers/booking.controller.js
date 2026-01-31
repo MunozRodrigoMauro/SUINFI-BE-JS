@@ -1,3 +1,5 @@
+//src/controllers/booking.controller.js
+
 import mongoose from "mongoose";
 import Booking from "../models/Booking.js";
 import Professional from "../models/Professional.js";
@@ -13,6 +15,9 @@ import {
 // 🆕 PUSH
 import { sendPushToUser } from "../services/push.service.js";
 
+// ✅ CAMBIO UBER: usar misma lógica de matching que el cron
+import { pickNextProfessionalForImmediate } from "../services/instant-bookings.service.js";
+
 /* Utils */
 const isValidId = (v) => mongoose.Types.ObjectId.isValid(String(v));
 const toISOZ = (date, time) => {
@@ -21,6 +26,75 @@ const toISOZ = (date, time) => {
   if (!date || !time) return null;
   return new Date(`${date}T${time}:00.000Z`);
 };
+
+function toNumberOrNull(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function buildImmediateCriteriaFromBody(body) {
+  const b = body && typeof body === "object" ? body : {};
+  const out = {
+    clientLocation: null,
+    maxDistance: null,
+    requireCriminalRecord: true,
+    requireLicense: false,
+    minAverageRating: null,
+    minReviews: null,
+  };
+
+  const requireCriminalRecord =
+    typeof b.requireCriminalRecord === "boolean" ? b.requireCriminalRecord : true;
+  out.requireCriminalRecord = requireCriminalRecord;
+
+  if (typeof b.requireLicense === "boolean") out.requireLicense = b.requireLicense;
+
+  const minAverageRating = toNumberOrNull(b.minAverageRating);
+  if (minAverageRating != null) out.minAverageRating = minAverageRating;
+
+  const minReviews = toNumberOrNull(b.minReviews);
+  if (minReviews != null) out.minReviews = minReviews;
+
+  const maxDistance = toNumberOrNull(b.maxDistance);
+  if (maxDistance != null) out.maxDistance = maxDistance;
+
+  const loc = b.clientLocation;
+  if (
+    loc &&
+    typeof loc === "object" &&
+    Number.isFinite(Number(loc.lat)) &&
+    Number.isFinite(Number(loc.lng))
+  ) {
+    out.clientLocation = { type: "Point", coordinates: [Number(loc.lng), Number(loc.lat)] };
+  }
+
+  return out;
+}
+
+// function hasApprovedCriminalRecord(pro, now) {
+//   const cr = pro?.documents?.criminalRecord;
+//   if (!cr) return false;
+//   if (cr.status !== "approved") return false;
+//   if (!cr.expiresAt) return true;
+//   const t = new Date(cr.expiresAt).getTime();
+//   return t >= now.getTime();
+// }
+
+function hasApprovedCriminalRecord(pro, now) {
+  const cr = pro?.documents?.criminalRecord;
+  if (!cr) return false;
+
+  // ✅ POR AHORA: alcanza con que esté subido (url) y no vencido
+  if (!cr.url) return false;
+
+  // 🔒 FUTURO (activar cuando tengas backoffice):
+  // if (cr.status !== "approved") return false;
+
+  if (!cr.expiresAt) return true;
+  const t = new Date(cr.expiresAt).getTime();
+  return t >= now.getTime();
+}
+
 
 /**
  * Regla de negocio:
@@ -35,7 +109,7 @@ export const createBooking = async (req, res) => {
     if (!me) return res.status(401).json({ message: "No autorizado" });
 
     const {
-      professionalId,
+      professionalId: professionalIdRaw,
       serviceId,
       scheduledAt,
       date,
@@ -45,9 +119,17 @@ export const createBooking = async (req, res) => {
       isImmediate = false,
     } = req.body || {};
 
+    const criteria = isImmediate ? buildImmediateCriteriaFromBody(req.body) : null;
+
     // Validación básica (422 con details.errors para friendly UX en FE)
     const errors = {};
-    if (!isValidId(professionalId)) errors.professionalId = "Profesional inválido";
+
+    const wantsAutoAssign = isImmediate === true && !professionalIdRaw;
+
+    if (!wantsAutoAssign) {
+      if (!isValidId(professionalIdRaw)) errors.professionalId = "Profesional inválido";
+    }
+
     if (!isValidId(serviceId)) errors.serviceId = "Servicio inválido";
 
     let when = null;
@@ -61,21 +143,86 @@ export const createBooking = async (req, res) => {
       else when = z;
     }
 
+    if (wantsAutoAssign) {
+      if (!criteria?.clientLocation) {
+        errors.clientLocation = "Ubicación requerida para reserva inmediata automática";
+      }
+      const md = toNumberOrNull(criteria?.maxDistance);
+      if (md == null || md <= 0) {
+        errors.maxDistance = "maxDistance requerido (metros) para reserva inmediata automática";
+      }
+    }
+
     if (Object.keys(errors).length) {
       return res.status(422).json({ message: "Datos inválidos", errors });
     }
 
+    const svc = await Service.findById(serviceId).select("_id").lean();
+    if (!svc) return res.status(404).json({ message: "Servicio no encontrado" });
+
+    // ✅ CAMBIO UBER: si es inmediata y NO viene professionalId, asignamos automáticamente
+    let resolvedProfessionalId = professionalIdRaw ? String(professionalIdRaw) : null;
+
+    if (wantsAutoAssign) {
+      const nowPick = new Date();
+      const next = await pickNextProfessionalForImmediate({
+        serviceId: String(serviceId),
+        excludeProfessionalIds: [],
+        now: nowPick,
+        criteria,
+        scheduledAt: when,
+      });
+
+      if (!next?._id) {
+        return res.status(409).json({ message: "No encontramos un profesional disponible ahora." });
+      }
+      resolvedProfessionalId = String(next._id);
+    }
+
     // Existencias
-    const pro = await Professional.findById(professionalId)
-      .select("_id depositEnabled user services isAvailableNow")
+    const pro = await Professional.findById(resolvedProfessionalId)
+      .select("_id depositEnabled user services isAvailableNow instantSuspendedUntil documents")
       .lean();
     if (!pro) return res.status(404).json({ message: "Profesional no encontrado" });
 
-    // [CAMBIO] ya no bloqueamos la reserva inmediata si el pro no está "availableNow".
-    // El tipo de reserva lo pide el cliente y puede quedar para el próximo turno.
+    // ✅ [CAMBIO] si está suspendido, no permitimos booking inmediato hacia ese pro
+    if (isImmediate === true) {
+      const now = new Date();
+      const until = pro.instantSuspendedUntil ? new Date(pro.instantSuspendedUntil) : null;
+      if (until && until.getTime() > now.getTime()) {
+        return res.status(409).json({ message: "Este profesional no está disponible en este momento." });
+      }
+    }
 
-    const svc = await Service.findById(serviceId).select("_id").lean();
-    if (!svc) return res.status(404).json({ message: "Servicio no encontrado" });
+    // ✅ CAMBIO UBER: si es inmediata, antecedentes aprobados y no vencidos (obligatorio por default)
+    if (isImmediate === true) {
+      const now = new Date();
+      const requireCr = criteria?.requireCriminalRecord !== false;
+      if (requireCr) {
+        // eslint-disable-next-line no-console
+console.log('[immediate][criteria-check]', {
+  proId: String(pro._id),
+  isAvailableNow: pro.isAvailableNow,
+  instantSuspendedUntil: pro.instantSuspendedUntil || null,
+  criminalRecord: pro?.documents?.criminalRecord || null,
+});
+
+        const okCr = hasApprovedCriminalRecord(pro, now);
+        if (!okCr) {
+          return res
+            .status(409)
+            .json({ message: "Este profesional no cumple los requisitos para reservas inmediatas." });
+        }
+      }
+      if (criteria?.requireLicense === true) {
+        const lic = pro?.documents?.license;
+        if (!lic || lic.status !== "approved") {
+          return res
+            .status(409)
+            .json({ message: "Este profesional no cumple los requisitos para reservas inmediatas." });
+        }
+      }
+    }
 
     // Guardrail: si requiere seña, esta ruta NO permite crear booking
     if (pro.depositEnabled === true) {
@@ -86,7 +233,7 @@ export const createBooking = async (req, res) => {
 
     // Choque exacto de turno (mismo profesional, mismo horario, reserva activa)
     const busy = await Booking.exists({
-      professional: professionalId,
+      professional: resolvedProfessionalId,
       scheduledAt: when,
       status: { $in: ["pending", "accepted"] },
     });
@@ -97,7 +244,7 @@ export const createBooking = async (req, res) => {
     // Doble booking con el mismo profesional (opcional: bloquea si ya tenés una activa)
     const alreadyWithPro = await Booking.exists({
       client: me,
-      professional: professionalId,
+      professional: resolvedProfessionalId,
       status: { $in: ["pending", "accepted"] },
     });
     if (alreadyWithPro) {
@@ -108,16 +255,41 @@ export const createBooking = async (req, res) => {
       });
     }
 
+    // ✅ [CAMBIO] metadata de inmediatas (fallback 5m / expire 15m)
+    const now = new Date();
+    const immediateMeta = isImmediate
+      ? {
+          firstOfferedAt: now,
+          currentOfferAt: now,
+          expiresAt: new Date(now.getTime() + 15 * 60 * 1000),
+          offeredProfessionals: [resolvedProfessionalId],
+          fallbackCount: 0,
+          lastFallbackAt: null,
+          expiredAt: null,
+          // ✅ CAMBIO UBER: persistimos criterios para cron/fallback
+          criteria: criteria || {
+            clientLocation: null,
+            maxDistance: null,
+            requireCriminalRecord: true,
+            requireLicense: false,
+            minAverageRating: null,
+            minReviews: null,
+          },
+        }
+      : null;
+
     // Crear
     const doc = await Booking.create({
       client: me,
-      professional: professionalId,
+      professional: resolvedProfessionalId,
       service: serviceId,
       scheduledAt: when,
       status: "pending",
       note: String(note || "").slice(0, 1000),
       address: address || "",
       isImmediate: !!isImmediate, // [CAMBIO] siempre respetamos lo que pidió el FE
+      // ✅ [CAMBIO] se guarda SLA/offer/fallback
+      ...(isImmediate ? { immediate: immediateMeta } : {}),
       // ✨ Sin seña
       depositPaid: false,
       deposit: {
@@ -141,8 +313,8 @@ export const createBooking = async (req, res) => {
     // ✉️ NUEVO: encolo notificación de “nueva reserva” al profesional
     try {
       await notifyBookingCreated({ booking: saved });
-    } catch (e) {
-      console.warn("notifyBookingCreated error:", e?.message || e);
+    } catch {
+      // noop
     }
 
     // 🆕 PUSH: avisar al profesional
@@ -157,8 +329,8 @@ export const createBooking = async (req, res) => {
         body,
         data: { type: "booking", bookingId: String(saved._id) },
       });
-    } catch (e) {
-      console.warn("push booking created error:", e?.message || e);
+    } catch {
+      // noop
     }
 
     // 🔌 Opcional (no rompe nada): avisar por Socket.IO a dashboards
@@ -170,13 +342,12 @@ export const createBooking = async (req, res) => {
         professional: saved?.professional?._id || saved?.professional,
         client: saved?.client?._id || saved?.client,
       });
-    } catch (e) {
+    } catch {
       // noop
     }
 
     return res.status(201).json(saved);
-  } catch (e) {
-    console.error("createBooking error:", e?.message || e);
+  } catch {
     return res.status(500).json({ message: "Server error" });
   }
 };
@@ -201,8 +372,7 @@ export const getMyBookings = async (req, res) => {
       .populate("service", "name price");
 
     return res.json(items);
-  } catch (e) {
-    console.error("getMyBookings error:", e?.message || e);
+  } catch {
     return res.status(500).json({ message: "Server error" });
   }
 };
@@ -226,8 +396,7 @@ export const getBookingsForMe = async (req, res) => {
       .populate("service", "name price");
 
     return res.json(items);
-  } catch (e) {
-    console.error("getBookingsForMe error:", e?.message || e);
+  } catch {
     return res.status(500).json({ message: "Server error" });
   }
 };
@@ -306,8 +475,8 @@ export const updateBookingStatus = async (req, res) => {
     if (status === "completed") {
       try {
         await onBookingCompleted({ booking: populated });
-      } catch (e) {
-        console.warn("points.onBookingCompleted:", e?.message || e);
+      } catch {
+        // noop
       }
     }
 
@@ -320,8 +489,8 @@ export const updateBookingStatus = async (req, res) => {
           await notifyBookingCanceledByPro({ booking: populated });
         }
       }
-    } catch (e) {
-      console.warn("notifyBookingCanceled* error:", e?.message || e);
+    } catch {
+      // noop
     }
 
     // 🆕 PUSH: avisos por cambios de estado (sin romper el flujo)
@@ -376,8 +545,8 @@ export const updateBookingStatus = async (req, res) => {
           });
         }
       }
-    } catch (e) {
-      console.warn("push booking status error:", e?.message || e);
+    } catch {
+      // noop
     }
 
     // 🔌 Opcional: evento Socket.IO para refrescar listados
@@ -387,13 +556,235 @@ export const updateBookingStatus = async (req, res) => {
         id: populated._id,
         status: populated.status,
       });
-    } catch (e) {
+    } catch {
       // noop
     }
 
     return res.json(populated);
-  } catch (e) {
-    console.error("updateBookingStatus error:", e?.message || e);
+  } catch {
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+/* ===========================
+   ✅ CAMBIO: fallback manual inmediato para reservas "inmediatas"
+   POST /api/bookings/:id/instant/fallback
+=========================== */
+
+const LATE_MARKS_PER_STRIKE = 3;
+const STRIKES_TO_SUSPEND = 3;
+const SUSPEND_HOURS = 24;
+
+async function applyLateMark(io, professionalId, bookingId) {
+  const now = new Date();
+
+  const pro = await Professional.findById(professionalId).select(
+    "_id user isAvailableNow instantLateMarks instantStrikes instantSuspendedUntil"
+  );
+
+  if (!pro) return;
+
+  const prevLate = Number(pro.instantLateMarks || 0);
+  const prevStrikes = Number(pro.instantStrikes || 0);
+
+  let nextLate = prevLate + 1;
+  let nextStrikes = prevStrikes;
+  let nextSuspendedUntil = pro.instantSuspendedUntil || null;
+
+  if (nextLate >= LATE_MARKS_PER_STRIKE) {
+    nextLate = 0;
+    nextStrikes = prevStrikes + 1;
+  }
+
+  if (nextStrikes >= STRIKES_TO_SUSPEND) {
+    nextSuspendedUntil = new Date(now.getTime() + SUSPEND_HOURS * 60 * 60 * 1000);
+  }
+
+  const patch = {
+    instantLateMarks: nextLate,
+    instantStrikes: nextStrikes,
+    instantLastLateAt: now,
+    ...(nextStrikes !== prevStrikes ? { instantLastStrikeAt: now } : {}),
+    instantSuspendedUntil: nextSuspendedUntil,
+    isAvailableNow: false,
+    onlineSince: null,
+    lastActivityAt: now,
+  };
+
+  try {
+    await Professional.updateOne({ _id: pro._id }, { $set: patch }, { timestamps: false });
+  } catch {
+    // noop
+  }
+
+  try {
+    io?.emit?.("availability:update", {
+      userId: pro.user.toString(),
+      isAvailableNow: false,
+      at: now.toISOString(),
+    });
+  } catch {
+    // noop
+  }
+
+  try {
+    await sendPushToUser(String(pro.user), {
+      title: nextSuspendedUntil ? "Disponibilidad suspendida" : "Reserva inmediata perdida",
+      body: nextSuspendedUntil
+        ? "Quedaste suspendido temporalmente por no responder solicitudes."
+        : "No respondiste a tiempo una solicitud inmediata.",
+      data: {
+        type: "status",
+        kind: "instant_penalty",
+        bookingId: String(bookingId || ""),
+      },
+    });
+  } catch {
+    // noop
+  }
+
+  try {
+    io?.to?.(String(pro.user))?.emit?.("instant:penalty", {
+      bookingId: String(bookingId || ""),
+      instantLateMarks: nextLate,
+      instantStrikes: nextStrikes,
+      instantSuspendedUntil: nextSuspendedUntil ? nextSuspendedUntil.toISOString() : null,
+      at: now.toISOString(),
+    });
+  } catch {
+    // noop
+  }
+}
+
+export const fallbackImmediateBookingNow = async (req, res) => {
+  try {
+    const me = req.user?.id;
+    if (!me) return res.status(401).json({ message: "No autorizado" });
+
+    const bookingId = req.params.id;
+    if (!isValidId(bookingId)) return res.status(400).json({ message: "Reserva inválida" });
+
+    const io = req.app?.get?.("io");
+
+    const booking = await Booking.findById(bookingId)
+      .select("_id client professional service scheduledAt status isImmediate immediate")
+      .lean();
+
+    if (!booking) return res.status(404).json({ message: "Reserva no encontrada" });
+
+    if (String(booking.client) !== String(me)) {
+      return res.status(403).json({ message: "No autorizado" });
+    }
+
+    if (booking.isImmediate !== true) {
+      return res.status(409).json({ message: "Esta reserva no es inmediata." });
+    }
+
+    if (booking.status !== "pending") {
+      return res.status(409).json({ message: "La reserva no está pendiente." });
+    }
+
+    const now = new Date();
+    const offered = Array.isArray(booking?.immediate?.offeredProfessionals)
+      ? booking.immediate.offeredProfessionals.map((x) => String(x))
+      : [];
+
+    const currentProId = String(booking.professional);
+    const excludeIds = [...new Set([...offered, currentProId])];
+
+    const criteria = booking?.immediate?.criteria || {};
+
+    const next = await pickNextProfessionalForImmediate({
+      serviceId: String(booking.service),
+      excludeProfessionalIds: excludeIds,
+      now,
+      criteria,
+      scheduledAt: booking.scheduledAt,
+    });
+
+    if (!next?._id) {
+      return res.status(409).json({ message: "No encontramos otro profesional disponible ahora." });
+    }
+
+    // ✅ CAMBIO: penaliza al pro actual (misma regla que el cron)
+    await applyLateMark(io, currentProId, booking._id);
+
+    const updated = await Booking.findOneAndUpdate(
+      { _id: booking._id, status: "pending", professional: currentProId },
+      {
+        $set: {
+          professional: next._id,
+          "immediate.currentOfferAt": now,
+          "immediate.lastFallbackAt": now,
+        },
+        $inc: { "immediate.fallbackCount": 1 },
+        $addToSet: { "immediate.offeredProfessionals": next._id },
+      },
+      { new: true }
+    )
+      .populate({ path: "client", select: "name email" })
+      .populate({
+        path: "professional",
+        populate: { path: "user", select: "name email avatarUrl" },
+      })
+      .populate({ path: "service", select: "name price" });
+
+    if (!updated) {
+      return res.status(409).json({ message: "No se pudo reasignar en este momento." });
+    }
+
+    // ✅ CAMBIO: notificar por sockets/push (cliente y nuevo profesional)
+    try {
+      const clientUserId = updated?.client?._id || updated?.client;
+      const proUserId = updated?.professional?.user?._id || updated?.professional?.user;
+
+      io?.to?.(String(clientUserId))?.emit?.("instant:fallback", {
+        bookingId: String(updated._id),
+        fromProfessionalId: currentProId,
+        toProfessionalId: String(updated.professional?._id || updated.professional),
+        at: now.toISOString(),
+      });
+
+      io?.to?.(String(proUserId))?.emit?.("instant:offer", {
+        bookingId: String(updated._id),
+        at: now.toISOString(),
+      });
+
+      io?.emit?.("booking:updated", {
+        id: updated._id,
+        status: updated.status,
+      });
+
+      try {
+        await sendPushToUser(String(proUserId), {
+          title: "Nueva solicitud inmediata",
+          body: "Tenés 5 minutos para aceptar.",
+          data: { type: "booking", bookingId: String(updated._id), kind: "instant_offer" },
+        });
+      } catch {
+        // noop
+      }
+
+      try {
+        await sendPushToUser(String(clientUserId), {
+          title: "Buscando otro profesional",
+          body: "No hubo respuesta. Te conectamos con otro profesional.",
+          data: {
+            type: "booking",
+            bookingId: String(updated._id),
+            kind: "instant_fallback",
+            toProfessionalId: String(updated.professional?._id || updated.professional),
+          },
+        });
+      } catch {
+        // noop
+      }
+    } catch {
+      // noop
+    }
+
+    return res.json(updated);
+  } catch {
     return res.status(500).json({ message: "Server error" });
   }
 };

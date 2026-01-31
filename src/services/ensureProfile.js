@@ -1,3 +1,4 @@
+//src/services/ensureProfile.js
 // Crea (si no existe) el perfil correspondiente al rol
 import AdminModel from "../models/Admin.js";
 import ClientModel from "../models/Client.js";

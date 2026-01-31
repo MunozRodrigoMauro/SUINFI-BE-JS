@@ -1,4 +1,5 @@
-﻿import mongoose from "mongoose";
+﻿//src/scripts/resetOnlineSince.js
+import mongoose from "mongoose";
 import dotenv from "dotenv";
 import Professional from "../models/Professional.js";
 dotenv.config();

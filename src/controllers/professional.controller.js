@@ -52,6 +52,7 @@ function safeUnlinkByUrl(url = "") {
     const abs = path.resolve(process.cwd(), rel);
     if (fs.existsSync(abs)) fs.unlinkSync(abs);
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.warn("safeUnlinkByUrl:", e.message);
   }
 }
@@ -80,6 +81,7 @@ export const deleteMyDocument = async (req, res) => {
 
     return res.json({ message: "Documento eliminado", documents: pro.documents });
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error("deleteMyDocument error:", e);
     return res.status(500).json({ message: "Server error" });
   }
@@ -174,6 +176,7 @@ export const createProfessionalProfile = async (req, res) => {
     const saved = await profile.save();
     return res.status(201).json(saved);
   } catch (error) {
+    // eslint-disable-next-line no-console
     console.error("❌ Error al crear perfil:", error);
     return res.status(500).json({ message: "Server error", error });
   }
@@ -192,6 +195,10 @@ export const getProfessionals = async (req, res) => {
     } = req.query;
 
     const query = {};
+
+    // ✅ [CAMBIO] excluir suspendidos
+    const now = new Date();
+    query.$or = [{ instantSuspendedUntil: null }, { instantSuspendedUntil: { $lte: now } }];
 
     // [CHANGE GP-CSV] construir set de servicios filtrados
     let serviceIdsFilter = [];
@@ -222,6 +229,7 @@ export const getProfessionals = async (req, res) => {
         serviceIdsFilter = serviceIdsFilter.filter((id) => set.has(id));
         if (serviceIdsFilter.length === 0) {
           // CHANGES: log para auditoría
+          // eslint-disable-next-line no-console
           console.log("[GET /professionals] services∩category => vacío");
           return res.json({ items: [], total: 0, page: 1, pages: 1 });
         }
@@ -240,6 +248,7 @@ export const getProfessionals = async (req, res) => {
     if (String(availableNow) === "true") query.isAvailableNow = true;
 
     // CHANGES: log params y query armada
+    // eslint-disable-next-line no-console
     console.log("[GET /professionals] params=%o query=%o", {
       serviceId, categoryId, availableNow, page, limit, servicesParam, serviceIdsFilter
     }, query);
@@ -267,10 +276,12 @@ export const getProfessionals = async (req, res) => {
     const pages = Math.max(Math.ceil(total / limitNum), 1);
 
     // CHANGES: log resultado
+    // eslint-disable-next-line no-console
     console.log("[GET /professionals] result: items=%d page=%d pages=%d", total, pageNum, pages);
 
     return res.json({ items, total, page: pageNum, pages });
   } catch (error) {
+    // eslint-disable-next-line no-console
     console.error("❌ Error al obtener profesionales:", error);
     res.status(500).json({ message: "Error interno del servidor" });
   }
@@ -296,6 +307,7 @@ export const getProfessionalById = async (req, res) => {
     }
     res.json(professional);
   } catch (error) {
+    // eslint-disable-next-line no-console
     console.error("❌ Error getting professional by ID:", error);
     res.status(500).json({ error: "Server error" });
   }
@@ -320,6 +332,10 @@ export const getNearbyProfessionals = async (req, res) => {
     const query = {};
     // En schedule (availableNow !== "true"), NO filtrar por disponibilidad
     if (String(availableNow) === "true") query.isAvailableNow = true;
+
+    // ✅ [CAMBIO] excluir suspendidos
+    const now = new Date();
+    query.$or = [{ instantSuspendedUntil: null }, { instantSuspendedUntil: { $lte: now } }];
 
     // [CHANGE NEAR-CSV] construir set de servicios filtrados
     let serviceIdsFilter = [];
@@ -349,6 +365,7 @@ export const getNearbyProfessionals = async (req, res) => {
         serviceIdsFilter = serviceIdsFilter.filter((id) => set.has(id));
         if (serviceIdsFilter.length === 0) {
           // CHANGES: log para auditoría
+          // eslint-disable-next-line no-console
           console.log("[GET /professionals/nearby] services∩category => vacío");
           return res.json([]);
         }
@@ -364,6 +381,7 @@ export const getNearbyProfessionals = async (req, res) => {
     }
 
     // CHANGES: log params y query previa a $near
+    // eslint-disable-next-line no-console
     console.log("[GET /professionals/nearby] params=%o query=%o", {
       lat, lng, maxDistance, serviceId, categoryId, availableNow, servicesParam, serviceIdsFilter
     }, query);
@@ -391,10 +409,12 @@ export const getNearbyProfessionals = async (req, res) => {
     const pros = filterVerifiedWithUser(raw);
 
     // CHANGES: log cantidad devuelta
+    // eslint-disable-next-line no-console
     console.log("[GET /professionals/nearby] result: count=%d", pros.length);
 
     res.json(pros);
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error("nearby error", err);
     res.status(500).json({ error: "Server error" });
   }
@@ -409,9 +429,19 @@ export const updateAvailabilityNow = async (req, res) => {
     }
 
     const before = await ProfessionalModel.findOne(
-      { user: userId }, { availabilityStrategy:1, isAvailableNow:1, onlineSince:1, lastActivityAt:1 }
+      { user: userId }, { availabilityStrategy:1, isAvailableNow:1, onlineSince:1, lastActivityAt:1, instantSuspendedUntil:1 }
     ).lean();
+    // eslint-disable-next-line no-console
     console.log("[AVAIL PATCH BEFORE]", userId, before);
+
+    // ✅ [CAMBIO] si está suspendido, no puede setear isAvailableNow=true
+    if (isAvailableNow === true) {
+      const now = new Date();
+      const until = before?.instantSuspendedUntil ? new Date(before.instantSuspendedUntil) : null;
+      if (until && until.getTime() > now.getTime()) {
+        return res.status(403).json({ message: "SUSPENDED", suspendedUntil: until.toISOString() });
+      }
+    }
 
     const setPatch = {
       isAvailableNow,
@@ -435,6 +465,7 @@ export const updateAvailabilityNow = async (req, res) => {
       return res.status(404).json({ message: "Professional profile not found" });
     }
 
+    // eslint-disable-next-line no-console
     console.log("[AVAIL PATCH OK] userId=%s now=%o", userId, {
       isAvailableNow: updated.isAvailableNow,
       onlineSince: updated.onlineSince,
@@ -455,6 +486,7 @@ export const updateAvailabilityNow = async (req, res) => {
       availabilityStrategy: updated.availabilityStrategy,
     });
   } catch (error) {
+    // eslint-disable-next-line no-console
     console.error("❌ Error updating availability:", error);
     res.status(500).json({ message: "Server error" });
   }
@@ -462,7 +494,13 @@ export const updateAvailabilityNow = async (req, res) => {
 
 export const getAvailableNowProfessionals = async (_req, res) => {
   try {
-    const raw = await ProfessionalModel.find({ isAvailableNow: true })
+    const now = new Date();
+
+    const raw = await ProfessionalModel.find({
+      isAvailableNow: true,
+      // ✅ [CAMBIO] excluir suspendidos
+      $or: [{ instantSuspendedUntil: null }, { instantSuspendedUntil: { $lte: now } }],
+    })
       .populate({
         path: "user",
         select: "name email phone verified avatarUrl",
@@ -477,9 +515,11 @@ export const getAvailableNowProfessionals = async (_req, res) => {
 
     const professionals = filterVerifiedWithUser(raw);
     const ids = professionals.map(p => p.user?._id?.toString()).filter(Boolean);
+    // eslint-disable-next-line no-console
     console.log("[GET available-now] count=%d users=%j", ids.length, ids);
     res.json(professionals);
   } catch (error) {
+    // eslint-disable-next-line no-console
     console.error("❌ Error getting available professionals:", error);
     res.status(500).json({ error: "Server error" });
   }
@@ -501,7 +541,14 @@ export const updateAvailabilitySchedule = async (req, res) => {
     }
 
     const schedule = normalizeSchedule(raw);
-    const shouldBeOn = isNowWithinSchedule(schedule);
+
+    // ✅ [CAMBIO] si está suspendido, aunque esté en horario queda OFF
+    const pro = await ProfessionalModel.findOne({ user: userId }).select("instantSuspendedUntil").lean();
+    const now = new Date();
+    const suspendedUntil = pro?.instantSuspendedUntil ? new Date(pro.instantSuspendedUntil) : null;
+    const isSuspended = suspendedUntil && suspendedUntil.getTime() > now.getTime();
+
+    const shouldBeOn = isSuspended ? false : isNowWithinSchedule(schedule);
 
     let saved = await ProfessionalModel.findOneAndUpdate(
       { user: userId },
@@ -536,6 +583,7 @@ export const updateAvailabilitySchedule = async (req, res) => {
       isAvailableNow: saved.isAvailableNow,
     });
   } catch (error) {
+    // eslint-disable-next-line no-console
     console.error("❌ Error updating availabilitySchedule:", error);
     return res.status(500).json({ error: "Server error" });
   }
@@ -554,6 +602,7 @@ export const getMyProfessional = async (req, res) => {
     if (!doc || !doc.user) return res.json({ exists: false });
     res.json(doc);
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error("getMyProfessional error", e);
     res.status(500).json({ message: "Server error" });
   }
@@ -622,6 +671,7 @@ export const updateMyLocation = async (req, res) => {
 
     res.json({ ok: true });
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error("updateMyLocation error", e);
     res.status(500).json({ error: "Server error" });
   }
@@ -659,6 +709,7 @@ export const uploadMyDocument = async (req, res) => {
 
     return res.json({ message: "Documento actualizado", documents: pro.documents });
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error("uploadMyDocument error:", e);
     return res.status(500).json({ message: "Server error" });
   }
@@ -691,6 +742,7 @@ export const getDocsMeta = async (req, res) => {
 
     res.json({ criminalRecord: clean(cr), license: clean(lic) });
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error("getDocsMeta error:", e);
     res.status(500).json({ message: "Server error" });
   }
@@ -763,6 +815,7 @@ export const updateMyProfessional = async (req, res) => {
 
     res.json({ message: "Professional updated", professional: updated });
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error("updateMyProfessional error", e);
     res.status(500).json({ message: "Server error" });
   }
@@ -776,6 +829,7 @@ export const getMyPayout = async (req, res) => {
     if (!pro) return res.status(404).json({ message: "Professional profile not found" });
     res.json(pro.payout || {});
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error("getMyPayout error", e);
     res.status(500).json({ message: "Server error" });
   }
@@ -805,6 +859,7 @@ export const updateMyPayout = async (req, res) => {
     if (!updated) return res.status(404).json({ message: "Professional profile not found" });
     res.json({ message: "Payout updated", payout: updated.payout });
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error("updateMyPayout error", e);
     res.status(500).json({ message: "Server error" });
   }

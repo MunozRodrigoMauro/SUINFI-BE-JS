@@ -134,6 +134,13 @@ const professionalSchema = new mongoose.Schema(
 
     // ==== NUEVO: datos bancarios para liquidaciones ====
     payout: { type: payoutSchema, default: () => ({}) },
+
+    // ✅ [CAMBIO] penalizaciones por no responder inmediatas
+    instantLateMarks: { type: Number, default: 0 },
+    instantStrikes: { type: Number, default: 0 },
+    instantSuspendedUntil: { type: Date, default: null, index: true },
+    instantLastLateAt: { type: Date, default: null },
+    instantLastStrikeAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
@@ -142,4 +149,7 @@ const professionalSchema = new mongoose.Schema(
 professionalSchema.index({ location: "2dsphere" });
 // Índices sugeridos para cron de inactividad
 professionalSchema.index({ availabilityStrategy: 1, isAvailableNow: 1, lastActivityAt: 1 });
+// ✅ [CAMBIO] índice para consulta rápida de suspendidos
+professionalSchema.index({ instantSuspendedUntil: 1, isAvailableNow: 1 });
+
 export default mongoose.model("Professional", professionalSchema);

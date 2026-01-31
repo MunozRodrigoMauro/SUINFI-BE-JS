@@ -1,3 +1,4 @@
+//src/scripts/backfillAvailability.js
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import Professional from "../models/Professional.js";
