@@ -1,3 +1,4 @@
+//src/middlewares/canReport.middleware.js
 import Booking from "../models/Booking.js";
 import Professional from "../models/Professional.js";
 

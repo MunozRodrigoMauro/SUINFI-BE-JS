@@ -44,6 +44,9 @@ import jwt from "jsonwebtoken";
 
 import whatsappRoutes from "./routes/whatsapp.routes.js";
 
+// ✅ CAMBIO AQUÍ: montar rutas de blocks
+import blocksRoutes from "./routes/blocks.routes.js";
+
 dotenv.config();
 
 // import UserModel from "./models/User.js";
@@ -227,6 +230,10 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/professionals", professionalRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/chats", chatRoutes);
+
+// ✅ CAMBIO AQUÍ: habilitar /api/blocks (esto elimina el 404 de Mobile)
+app.use("/api/blocks", blocksRoutes);
+
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/clients", clientRoutes);
 app.use("/api/admins", adminRoutes);
@@ -249,7 +256,7 @@ app.use("/api/points", pointsRoutes);
 //   try {
 //     const { code, state } = req.query;
 //     if (!code) return res.status(400).send("Missing code");
-
+//
 //     let next = "/dashboard/user";
 //     if (state) {
 //       try {
@@ -257,15 +264,15 @@ app.use("/api/points", pointsRoutes);
 //         if (decoded?.next && typeof decoded.next === "string") next = decoded.next;
 //       } catch {}
 //     }
-
+//
 //     const { id_token, access_token } = await getTokens({ code });
 //     const g = await getGoogleUser(id_token, access_token);
 //     const { sub, email, name, picture, email_verified } = g || {};
-
+//
 //     if (!email) return res.status(400).send("Google account without email");
-
+//
 //     let user = await UserModel.findOne({ email });
-
+//
 //     if (!user) {
 //       const randomPass = crypto.randomBytes(24).toString("hex");
 //       const hashed = await bcrypt.hash(randomPass, 10);
@@ -289,13 +296,13 @@ app.use("/api/points", pointsRoutes);
 //         user = await UserModel.findByIdAndUpdate(user._id, { $set: patch }, { new: true });
 //       }
 //     }
-
+//
 //     const token = jwt.sign(
 //       { id: user._id.toString(), role: user.role },
 //       process.env.JWT_SECRET || "changeme",
 //       { expiresIn: process.env.JWT_EXPIRES_IN || "30d" }
 //     );
-
+//
 //     const appUrl = process.env.APP_PUBLIC_URL || "http://localhost:5173";
 //     const redirectUrl = `${appUrl}/oauth/google/callback?token=${encodeURIComponent(
 //       token
@@ -392,3 +399,8 @@ mongoose
     // eslint-disable-next-line no-console
     console.error("❌ Error al conectar a Mongo:", err);
   });
+
+/*
+[CAMBIOS HECHOS AQUÍ]
+- Se importó y montó blocksRoutes para habilitar /api/blocks y eliminar el 404 del Mobile.
+*/

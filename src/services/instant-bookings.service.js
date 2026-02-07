@@ -5,6 +5,9 @@ import Professional from "../models/Professional.js";
 import NotificationModel from "../models/Notification.js";
 import { sendPushToUser } from "../services/push.service.js";
 
+// ✅ [CAMBIO] BLOCKS: para evitar reasignaciones (cron/fallback) hacia profesionales bloqueados
+import { getBlockedUserIds } from "../utils/blocks.js";
+
 const FALLBACK_AFTER_MS = 5 * 60 * 1000; // 5 minutos
 const EXPIRE_AFTER_MS = 15 * 60 * 1000; // 15 minutos
 
@@ -22,6 +25,16 @@ function isSuspended(pro, now) {
 function toNumberOrNull(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+function normalizeObjectIds(ids) {
+  const out = [];
+  const arr = Array.isArray(ids) ? ids : [];
+  for (const x of arr) {
+    const s = String(x);
+    if (mongoose.Types.ObjectId.isValid(s)) out.push(new mongoose.Types.ObjectId(s));
+  }
+  return out;
 }
 
 function normalizeCriteria(rawCriteria, now) {
@@ -99,7 +112,7 @@ function buildDocsMatch(criteria, now) {
   return and;
 }
 
-function buildBaseProQuery(serviceId, excludeProfessionalIds, now, criteria) {
+function buildBaseProQuery(serviceId, excludeProfessionalIds, excludeUserIds, now, criteria) {
   const q = {
     services: serviceId,
     isAvailableNow: true,
@@ -107,6 +120,11 @@ function buildBaseProQuery(serviceId, excludeProfessionalIds, now, criteria) {
     _id: { $nin: excludeProfessionalIds },
     $or: [{ instantSuspendedUntil: null }, { instantSuspendedUntil: { $lte: now } }],
   };
+
+  // ✅ [CAMBIO] BLOCKS: excluir por userId (bloqueados)
+  if (Array.isArray(excludeUserIds) && excludeUserIds.length) {
+    q.user = { $nin: excludeUserIds };
+  }
 
   const andDocs = buildDocsMatch(criteria, now);
   if (andDocs.length) {
@@ -252,10 +270,14 @@ async function applyLateMark(io, professionalId, bookingId) {
  * - license opcional
  * - cercanía si hay clientLocation + maxDistance (usa $geoNear)
  * - evita profesionales con choque de turno
+ *
+ * ✅ [CAMBIO] BLOCKS:
+ * - excludeUserIds: evita candidatos cuyo user esté bloqueado (en cualquiera de los sentidos).
  */
 export async function pickNextProfessionalForImmediate({
   serviceId,
   excludeProfessionalIds,
+  excludeUserIds,
   now,
   criteria,
   scheduledAt,
@@ -263,10 +285,8 @@ export async function pickNextProfessionalForImmediate({
   const nowDate = now instanceof Date ? now : new Date();
   const crit = normalizeCriteria(criteria, nowDate);
 
-  const excludeIds = (excludeProfessionalIds || [])
-    .map((x) => String(x))
-    .filter((x) => mongoose.Types.ObjectId.isValid(x))
-    .map((x) => new mongoose.Types.ObjectId(x));
+  const excludeProIds = normalizeObjectIds(excludeProfessionalIds || []);
+  const excludeUsrIds = normalizeObjectIds(excludeUserIds || []);
 
   const svcId = mongoose.Types.ObjectId.isValid(String(serviceId))
     ? new mongoose.Types.ObjectId(String(serviceId))
@@ -287,7 +307,7 @@ export async function pickNextProfessionalForImmediate({
       crit.maxDistance > 0;
 
     if (hasGeo) {
-      const geoQuery = buildBaseProQuery(svcId, excludeIds, nowDate, crit);
+      const geoQuery = buildBaseProQuery(svcId, excludeProIds, excludeUsrIds, nowDate, crit);
 
       const pipeline = [
         {
@@ -324,7 +344,7 @@ export async function pickNextProfessionalForImmediate({
         candidate = list[0] || null;
       }
     } else {
-      const q = buildBaseProQuery(svcId, excludeIds, nowDate, crit);
+      const q = buildBaseProQuery(svcId, excludeProIds, excludeUsrIds, nowDate, crit);
 
       candidate = await Professional.findOne(q)
         .select("_id user lastActivityAt averageRating reviews instantSuspendedUntil")
@@ -334,13 +354,13 @@ export async function pickNextProfessionalForImmediate({
 
     if (!candidate) return null;
     if (isSuspended(candidate, nowDate)) {
-      excludeIds.push(new mongoose.Types.ObjectId(String(candidate._id)));
+      excludeProIds.push(new mongoose.Types.ObjectId(String(candidate._id)));
       continue;
     }
 
     const busy = await isBusyAt(candidate._id, scheduledAt);
     if (busy) {
-      excludeIds.push(new mongoose.Types.ObjectId(String(candidate._id)));
+      excludeProIds.push(new mongoose.Types.ObjectId(String(candidate._id)));
       continue;
     }
 
@@ -440,9 +460,14 @@ export async function forceImmediateFallback({ io, bookingId }) {
   }
 
   const criteria = booking?.immediate?.criteria || {};
+
+  // ✅ [CAMBIO] BLOCKS: si durante la espera el cliente bloqueó o fue bloqueado, no reasignar a esos pros
+  const blockedUserIds = await getBlockedUserIds(String(booking.client));
+
   const next = await pickNextProfessionalForImmediate({
     serviceId: booking.service,
     excludeProfessionalIds: excludeIds,
+    excludeUserIds: blockedUserIds,
     now,
     criteria,
     scheduledAt: booking.scheduledAt,
@@ -548,3 +573,9 @@ export async function forceImmediateFallback({ io, bookingId }) {
 export function getFallbackConstants() {
   return { FALLBACK_AFTER_MS, EXPIRE_AFTER_MS };
 }
+
+/*
+✅ [CAMBIO] BLOCKS:
+- pickNextProfessionalForImmediate: nuevo parámetro excludeUserIds + filtro en query (q.user $nin).
+- forceImmediateFallback (cron/fallback): calcula bloqueados del cliente y los excluye del matcher.
+*/

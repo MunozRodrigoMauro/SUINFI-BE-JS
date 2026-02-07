@@ -2,11 +2,15 @@
 import mongoose from "mongoose";
 import path from "path";
 import fs from "fs";
+import jwt from "jsonwebtoken";
 
 import ProfessionalModel from "../models/Professional.js";
 import ServiceModel from "../models/Service.js";
 import isNowWithinSchedule from "../utils/schedule.js";
 import { normalizePhone } from "../utils/phone.js";
+
+// ✅ [CAMBIO] BLOCKS: helpers para filtrar profesionales bloqueados cuando el request trae token
+import { getBlockedUserIds, assertNotBlocked } from "../utils/blocks.js";
 
 /* Helpers */
 function filterVerifiedWithUser(docs) {
@@ -60,6 +64,30 @@ function safeUnlinkByUrl(url = "") {
 /* Constantes de negocio seña */
 const DEPOSIT_MIN = 2000;
 const DEPOSIT_MAX = 5000;
+
+// ✅ [CAMBIO] BLOCKS: parsear JWT opcional en endpoints públicos (sin romperlos)
+function asRecord(v) {
+  return v && typeof v === "object" ? v : null;
+}
+
+function getUserIdFromAuthHeader(req) {
+  const auth = String(req?.headers?.authorization || "").trim();
+  if (!auth || !auth.toLowerCase().startsWith("bearer ")) return null;
+  const token = auth.slice(7).trim();
+  if (!token) return null;
+
+  try {
+    const secret = process.env.JWT_SECRET || process.env.JWT_KEY || "changeme";
+    const decoded = jwt.verify(token, secret);
+    const rec = asRecord(decoded);
+    if (!rec) return null;
+
+    const id = rec.id ?? rec._id;
+    return typeof id === "string" ? id : null;
+  } catch {
+    return null;
+  }
+}
 
 /** DELETE /api/professionals/me/docs/:type */
 export const deleteMyDocument = async (req, res) => {
@@ -196,6 +224,13 @@ export const getProfessionals = async (req, res) => {
 
     const query = {};
 
+    // ✅ [CAMBIO] BLOCKS: si el request trae token, excluir pros bloqueados (por mí o que me bloquearon)
+    const requesterId = getUserIdFromAuthHeader(req);
+    if (requesterId) {
+      const blockedUserIds = await getBlockedUserIds(requesterId);
+      if (blockedUserIds.length) query.user = { $nin: blockedUserIds };
+    }
+
     // ✅ [CAMBIO] excluir suspendidos
     const now = new Date();
     query.$or = [{ instantSuspendedUntil: null }, { instantSuspendedUntil: { $lte: now } }];
@@ -290,6 +325,7 @@ export const getProfessionals = async (req, res) => {
 export const getProfessionalById = async (req, res) => {
   try {
     const { id } = req.params;
+
     const professional = await ProfessionalModel.findById(id)
       .populate({
         path: "user",
@@ -305,8 +341,19 @@ export const getProfessionalById = async (req, res) => {
     if (!professional || !professional.user) {
       return res.status(404).json({ error: "Not found" });
     }
+
+    // ✅ [CAMBIO] BLOCKS: si viene token, no permitir ver detalle de un pro bloqueado
+    const requesterId = getUserIdFromAuthHeader(req);
+    if (requesterId) {
+      const otherUserId = String(professional.user?._id || professional.user);
+      await assertNotBlocked(requesterId, otherUserId);
+    }
+
     res.json(professional);
   } catch (error) {
+    if (String(error?.message || "") === "blocked") {
+      return res.status(403).json({ message: "blocked" });
+    }
     // eslint-disable-next-line no-console
     console.error("❌ Error getting professional by ID:", error);
     res.status(500).json({ error: "Server error" });
@@ -330,6 +377,14 @@ export const getNearbyProfessionals = async (req, res) => {
       return res.status(400).json({ error: "Latitude and longitude are required" });
 
     const query = {};
+
+    // ✅ [CAMBIO] BLOCKS: si el request trae token, excluir pros bloqueados (por mí o que me bloquearon)
+    const requesterId = getUserIdFromAuthHeader(req);
+    if (requesterId) {
+      const blockedUserIds = await getBlockedUserIds(requesterId);
+      if (blockedUserIds.length) query.user = { $nin: blockedUserIds };
+    }
+
     // En schedule (availableNow !== "true"), NO filtrar por disponibilidad
     if (String(availableNow) === "true") query.isAvailableNow = true;
 
@@ -492,15 +547,24 @@ export const updateAvailabilityNow = async (req, res) => {
   }
 };
 
-export const getAvailableNowProfessionals = async (_req, res) => {
+export const getAvailableNowProfessionals = async (req, res) => {
   try {
     const now = new Date();
 
-    const raw = await ProfessionalModel.find({
+    const q = {
       isAvailableNow: true,
       // ✅ [CAMBIO] excluir suspendidos
       $or: [{ instantSuspendedUntil: null }, { instantSuspendedUntil: { $lte: now } }],
-    })
+    };
+
+    // ✅ [CAMBIO] BLOCKS: si el request trae token, excluir pros bloqueados (por mí o que me bloquearon)
+    const requesterId = getUserIdFromAuthHeader(req);
+    if (requesterId) {
+      const blockedUserIds = await getBlockedUserIds(requesterId);
+      if (blockedUserIds.length) q.user = { $nin: blockedUserIds };
+    }
+
+    const raw = await ProfessionalModel.find(q)
       .populate({
         path: "user",
         select: "name email phone verified avatarUrl",
@@ -871,4 +935,8 @@ export const updateMyPayout = async (req, res) => {
 - getNearbyProfessionals: igual que arriba, acepta `services` CSV/array + `serviceId` y mantiene consulta geoespacial con $near. [CHANGE NEAR-CSV]
 - En ambos: agregué logs `console.log` (// CHANGES) para corroborar filtros recibidos y tamaño de resultados.
 - En schedule (availableNow !== "true"), NO filtrar por disponibilidad (se retorna el set filtrado por área/ubicación).
+
+// ✅ [CAMBIO] BLOCKS:
+- getProfessionals / getNearbyProfessionals / getAvailableNowProfessionals: si viene Authorization Bearer token, excluyen profesionales bloqueados (query.user $nin).
+- getProfessionalById: si viene token, devuelve 403 si el usuario está bloqueado en cualquiera de los dos sentidos.
 */

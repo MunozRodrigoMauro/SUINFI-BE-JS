@@ -1,5 +1,4 @@
-//src/controllers/booking.controller.js
-
+// src/controllers/booking.controller.js
 import mongoose from "mongoose";
 import Booking from "../models/Booking.js";
 import Professional from "../models/Professional.js";
@@ -17,6 +16,9 @@ import { sendPushToUser } from "../services/push.service.js";
 
 // ✅ CAMBIO UBER: usar misma lógica de matching que el cron
 import { pickNextProfessionalForImmediate } from "../services/instant-bookings.service.js";
+
+// ✅ [CAMBIO] BLOCKS: evitar crear reservas con usuarios bloqueados + excluir bloqueados en auto-assign/fallback
+import { getBlockedUserIds, assertNotBlocked } from "../utils/blocks.js";
 
 /* Utils */
 const isValidId = (v) => mongoose.Types.ObjectId.isValid(String(v));
@@ -95,7 +97,6 @@ function hasApprovedCriminalRecord(pro, now) {
   return t >= now.getTime();
 }
 
-
 /**
  * Regla de negocio:
  * - Si el profesional tiene `depositEnabled = true`, NO permitimos reservar directo aquí.
@@ -163,11 +164,15 @@ export const createBooking = async (req, res) => {
     // ✅ CAMBIO UBER: si es inmediata y NO viene professionalId, asignamos automáticamente
     let resolvedProfessionalId = professionalIdRaw ? String(professionalIdRaw) : null;
 
+    // ✅ [CAMBIO] BLOCKS: excluir pros bloqueados en auto-assign (por mí o que me bloquearon)
+    const blockedUserIds = wantsAutoAssign ? await getBlockedUserIds(me) : [];
+
     if (wantsAutoAssign) {
       const nowPick = new Date();
       const next = await pickNextProfessionalForImmediate({
         serviceId: String(serviceId),
         excludeProfessionalIds: [],
+        excludeUserIds: blockedUserIds,
         now: nowPick,
         criteria,
         scheduledAt: when,
@@ -185,6 +190,16 @@ export const createBooking = async (req, res) => {
       .lean();
     if (!pro) return res.status(404).json({ message: "Profesional no encontrado" });
 
+    // ✅ [CAMBIO] BLOCKS: si están bloqueados entre sí, no permitir reservar
+    try {
+      await assertNotBlocked(me, String(pro.user));
+    } catch (e) {
+      if (String(e?.message || "") === "blocked") {
+        return res.status(403).json({ message: "blocked" });
+      }
+      throw e;
+    }
+
     // ✅ [CAMBIO] si está suspendido, no permitimos booking inmediato hacia ese pro
     if (isImmediate === true) {
       const now = new Date();
@@ -200,12 +215,12 @@ export const createBooking = async (req, res) => {
       const requireCr = criteria?.requireCriminalRecord !== false;
       if (requireCr) {
         // eslint-disable-next-line no-console
-console.log('[immediate][criteria-check]', {
-  proId: String(pro._id),
-  isAvailableNow: pro.isAvailableNow,
-  instantSuspendedUntil: pro.instantSuspendedUntil || null,
-  criminalRecord: pro?.documents?.criminalRecord || null,
-});
+        console.log('[immediate][criteria-check]', {
+          proId: String(pro._id),
+          isAvailableNow: pro.isAvailableNow,
+          instantSuspendedUntil: pro.instantSuspendedUntil || null,
+          criminalRecord: pro?.documents?.criminalRecord || null,
+        });
 
         const okCr = hasApprovedCriminalRecord(pro, now);
         if (!okCr) {
@@ -694,9 +709,13 @@ export const fallbackImmediateBookingNow = async (req, res) => {
 
     const criteria = booking?.immediate?.criteria || {};
 
+    // ✅ [CAMBIO] BLOCKS: excluir bloqueados también en fallback manual
+    const blockedUserIds = await getBlockedUserIds(me);
+
     const next = await pickNextProfessionalForImmediate({
       serviceId: String(booking.service),
       excludeProfessionalIds: excludeIds,
+      excludeUserIds: blockedUserIds,
       now,
       criteria,
       scheduledAt: booking.scheduledAt,
@@ -788,3 +807,10 @@ export const fallbackImmediateBookingNow = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
+
+/*
+✅ [CAMBIO] BLOCKS:
+- createBooking: impide reservar si el cliente y el profesional están bloqueados (403 blocked).
+- createBooking (auto-assign inmediata): pasa excludeUserIds al matcher para que nunca elija un pro bloqueado.
+- fallbackImmediateBookingNow: también excluye bloqueados al reasignar.
+*/

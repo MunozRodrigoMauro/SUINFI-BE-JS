@@ -1,3 +1,4 @@
+//src/routes/report.routes.js
 import { Router } from "express";
 import { verifyToken, requireAdmin } from "../middlewares/auth.middleware.js";
 import { canReport } from "../middlewares/canReport.middleware.js";

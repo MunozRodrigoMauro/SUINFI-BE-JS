@@ -9,6 +9,9 @@ import ProfessionalModel from "../models/Professional.js";
 import Client from "../models/Client.js";
 import { notifyChatMessageDeferred } from "../services/notification.service.js";
 
+// ✅ [CAMBIO BLOCK]
+import { getBlockSetsForMe, getBlockState, assertNotBlocked } from "../utils/blocks.js";
+
 // 🆕 PUSH
 import { sendPushToUser } from "../services/push.service.js";
 
@@ -47,6 +50,9 @@ async function resolveAvatarForUser(userLean) {
 export const listMyChats = async (req, res) => {
   const me = req.user.id;
 
+  // ✅ [CAMBIO BLOCK] en vez de filtrar, devolvemos flags para que FE pueda mostrar y permitir desbloquear
+  const { blockedByMeSet, blockedByOtherSet } = await getBlockSetsForMe(me);
+
   const chats = await Conversation.find({ participants: me })
     .sort({ updatedAt: -1 })
     .populate({ path: "lastMessage", select: "text createdAt from to readAt" })
@@ -54,37 +60,40 @@ export const listMyChats = async (req, res) => {
 
   // map otherUser + unreadCount
   const ids = new Set();
-  chats.forEach(c =>
-    c.participants.forEach(p => {
-      if (String(p) !== String(me)) ids.add(String(p));
+  chats.forEach((c) =>
+    c.participants.forEach((p) => {
+      const pid = String(p);
+      if (pid !== String(me)) ids.add(pid);
     })
   );
 
-  const others = await User.find(
-    { _id: { $in: [...ids] } },
-    "name email role avatarUrl"
-  ).lean();
+  const others = await User.find({ _id: { $in: [...ids] } }, "name email role avatarUrl").lean();
 
   // ✅ Asegurar avatarUrl aunque esté en Professional/Client
   const othersFixed = await Promise.all(
-    others.map(async u => {
+    others.map(async (u) => {
       const avatarUrl = await resolveAvatarForUser(u);
       return { ...u, avatarUrl };
     })
   );
 
-  const map = new Map(othersFixed.map(u => [String(u._id), u]));
+  const map = new Map(othersFixed.map((u) => [String(u._id), u]));
 
   // unread por chat
   const unreadCounts = await Message.aggregate([
     { $match: { to: new mongoose.Types.ObjectId(me), readAt: null } },
     { $group: { _id: "$chat", n: { $sum: 1 } } },
   ]);
-  const unreadMap = new Map(unreadCounts.map(u => [String(u._id), u.n]));
+  const unreadMap = new Map(unreadCounts.map((u) => [String(u._id), u.n]));
 
-  const items = chats.map(c => {
-    const otherId = String(c.participants.find(p => String(p) !== String(me)));
-    return {
+  const items = [];
+  for (const c of chats) {
+    const otherId = String(c.participants.find((p) => String(p) !== String(me)));
+
+    const blockedByMe = blockedByMeSet.has(otherId);
+    const blockedByOther = blockedByOtherSet.has(otherId);
+
+    items.push({
       _id: c._id,
       otherUser: map.get(otherId) || { _id: otherId, avatarUrl: "" },
       lastMessage: c.lastMessage
@@ -98,8 +107,13 @@ export const listMyChats = async (req, res) => {
           }
         : null,
       unreadCount: unreadMap.get(String(c._id)) || 0,
-    };
-  });
+
+      // ✅ flags extra (no rompen al FE aunque no estén tipados)
+      blockedByMe,
+      blockedByOther,
+      block: { blockedByMe, blockedByOther },
+    });
+  }
 
   res.json(items);
 };
@@ -118,6 +132,9 @@ export const getOrCreateWithOther = async (req, res) => {
   if (String(otherUserId) === String(me)) {
     return res.status(400).json({ message: "No podés chatear con vos mismo" });
   }
+
+  // ✅ [CAMBIO BLOCK] NO tiramos 403 acá: devolvemos flags para que el FE muestre “Chat bloqueado” y permita desbloquear
+  const blockState = await getBlockState(me, otherUserId);
 
   // User del otro (incluye avatarUrl)
   const other = await User.findById(otherUserId, "name email role avatarUrl").lean();
@@ -141,9 +158,7 @@ export const getOrCreateWithOther = async (req, res) => {
   }
 
   // Mensajes (asc)
-  const messages = await Message.find({ chat: chat._id })
-    .sort({ createdAt: 1 })
-    .lean();
+  const messages = await Message.find({ chat: chat._id }).sort({ createdAt: 1 }).lean();
 
   return res.json({
     chat,
@@ -155,10 +170,13 @@ export const getOrCreateWithOther = async (req, res) => {
       role: other.role,
       avatarUrl, // ✅ SIEMPRE viene (aunque sea "")
     },
+
+    // ✅ flags de bloqueo para el FE
+    blockedByMe: blockState.blockedByMe,
+    blockedByOther: blockState.blockedByOther,
+    block: { ...blockState },
   });
 };
-
-
 
 /**
  * GET /api/chats/:id/messages?limit=&before=
@@ -172,6 +190,8 @@ export const listMessages = async (req, res) => {
   if (!chat || !chat.participants.map(String).includes(String(me))) {
     return res.status(404).json({ message: "Chat no encontrado" });
   }
+
+  // ✅ [CAMBIO BLOCK] Permitimos leer historial aunque esté bloqueado (el envío sigue bloqueado en createMessage/typing)
 
   const q = { chat: id };
   if (before) q.createdAt = { $lt: new Date(before) };
@@ -198,7 +218,10 @@ export const createMessage = async (req, res) => {
   if (!chat || !chat.participants.map(String).includes(String(me))) {
     return res.status(404).json({ message: "Chat no encontrado" });
   }
-  const to = chat.participants.find(p => String(p) !== String(me));
+  const to = chat.participants.find((p) => String(p) !== String(me));
+
+  // ✅ [CAMBIO BLOCK] bloquear envío si hay bloqueo en cualquiera de los dos sentidos
+  await assertNotBlocked(me, String(to));
 
   const message = await Message.create({
     chat: id,
@@ -221,16 +244,15 @@ export const createMessage = async (req, res) => {
   // 🆕 PUSH
   try {
     const fromName = sender?.name || "Nuevo mensaje";
-    const msgText =
-      message.text.length > 120 ? message.text.slice(0, 117) + "..." : message.text;
+    const msgText = message.text.length > 120 ? message.text.slice(0, 117) + "..." : message.text;
 
     await sendPushToUser(String(to), {
       title: fromName,
       body: msgText,
-      data: { type: "message", chatId: String(id), otherUserId: String(me) }
+      data: { type: "message", chatId: String(id), otherUserId: String(me) },
     });
-  } catch (e) {
-    console.warn("push chat message error:", e?.message || e);
+  } catch {
+    // noop
   }
 
   res.status(201).json({ message });
@@ -248,10 +270,9 @@ export const markAsRead = async (req, res) => {
     return res.status(404).json({ message: "Chat no encontrado" });
   }
 
-  await Message.updateMany(
-    { chat: id, to: me, readAt: null },
-    { $set: { readAt: new Date() } }
-  );
+  // ✅ [CAMBIO BLOCK] Permitimos marcar leído aunque esté bloqueado (no permite enviar igual)
+
+  await Message.updateMany({ chat: id, to: me, readAt: null }, { $set: { readAt: new Date() } });
 
   await Notification.updateMany(
     { recipient: me, type: "message", "metadata.chatId": String(id), status: "pending" },
@@ -273,7 +294,10 @@ export const typing = async (req, res) => {
   if (!chat || !chat.participants.map(String).includes(String(me))) {
     return res.status(404).json({ message: "Chat no encontrado" });
   }
-  const other = chat.participants.find(p => String(p) !== String(me));
+  const other = chat.participants.find((p) => String(p) !== String(me));
+
+  // ✅ [CAMBIO BLOCK] no permitimos emitir typing si hay bloqueo
+  await assertNotBlocked(me, String(other));
 
   const io = req.app.get("io");
   io?.to(String(other)).emit("chat:typing", {
@@ -284,3 +308,10 @@ export const typing = async (req, res) => {
 
   res.json({ ok: true });
 };
+
+/*
+[CAMBIOS HECHOS AQUÍ]
+- Se agregó devolución de flags de bloqueo (blockedByMe/blockedByOther) en listMyChats y getOrCreateWithOther.
+- Se evitó tirar 403 en lecturas (with/messages/read) para que el FE pueda mostrar historial + permitir “Desbloquear”.
+- Se mantiene 403 en createMessage/typing (seguridad: no permitir contacto si hay bloqueo).
+*/
