@@ -1,3 +1,4 @@
+// src/middlewares/validateResult.js
 import { validationResult } from "express-validator";
 
 // 📌 Middleware que chequea si hubo errores de validación

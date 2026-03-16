@@ -1,3 +1,5 @@
+
+// src/controllers/service.controller.js
 import ServiceModel from "../models/Service.js"; // Importamos el modelo
 
 // 📌 Crear un nuevo servicio

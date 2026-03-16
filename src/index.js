@@ -47,6 +47,9 @@ import whatsappRoutes from "./routes/whatsapp.routes.js";
 // ✅ CAMBIO AQUÍ: montar rutas de blocks
 import blocksRoutes from "./routes/blocks.routes.js";
 
+// ✅ CAMBIO AQUÍ: montar rutas de reports
+import reportsRoutes from "./routes/report.routes.js";
+
 dotenv.config();
 
 // import UserModel from "./models/User.js";
@@ -234,6 +237,9 @@ app.use("/api/chats", chatRoutes);
 // ✅ CAMBIO AQUÍ: habilitar /api/blocks (esto elimina el 404 de Mobile)
 app.use("/api/blocks", blocksRoutes);
 
+// ✅ CAMBIO AQUÍ: habilitar /api/reports (denuncias)
+app.use("/api/reports", reportsRoutes);
+
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/clients", clientRoutes);
 app.use("/api/admins", adminRoutes);
@@ -403,4 +409,9 @@ mongoose
 /*
 [CAMBIOS HECHOS AQUÍ]
 - Se importó y montó blocksRoutes para habilitar /api/blocks y eliminar el 404 del Mobile.
+*/
+
+/*
+[CAMBIOS HECHOS AQUÍ - REPORTES]
+- Se importó y montó reportsRoutes para habilitar /api/reports.
 */
