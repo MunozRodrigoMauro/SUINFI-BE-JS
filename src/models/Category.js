@@ -1,3 +1,4 @@
+//src/models/Category.js
 import mongoose from "mongoose";
 import { capitalizeWords } from "../utils/capitalizeWords.js";
 import { slugify } from "../utils/slugify.js";

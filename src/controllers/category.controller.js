@@ -1,3 +1,4 @@
+//src/controllers/category.controller.js
 import CategoryModel from "../models/Category.js";
 
 /**

@@ -1,18 +1,69 @@
 // src/controllers/service.controller.js
-import ServiceModel from "../models/Service.js"; // Importamos el modelo
+import ServiceModel from "../models/Service.js";
+import CategoryModel from "../models/Category.js";
+
+function normalizeText(value = "") {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function cleanStringArray(values = []) {
+  if (!Array.isArray(values)) return [];
+  const seen = new Set();
+
+  return values
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .filter((value) => {
+      const key = normalizeText(value);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function buildSearchText(service, categoryName = "") {
+  const chunks = [
+    service?.name || "",
+    service?.description || "",
+    ...(Array.isArray(service?.aliases) ? service.aliases : []),
+    ...(Array.isArray(service?.tags) ? service.tags : []),
+    categoryName || "",
+  ];
+
+  return normalizeText(chunks.join(" "));
+}
 
 // 📌 Crear un nuevo servicio
 export const createService = async (req, res) => {
   try {
-    const { name, description, price } = req.body;
+    const { name, description, price, category, aliases = [], tags = [] } = req.body;
 
     // Validamos campos requeridos
-    if (!name || price === undefined) {
-      return res.status(400).json({ message: "El nombre y el precio son obligatorios" });
+    if (!name || price === undefined || !category) {
+      return res.status(400).json({
+        message: "El nombre, el precio y la categoría son obligatorios",
+      });
+    }
+
+    const existingCategory = await CategoryModel.findById(category).lean();
+    if (!existingCategory) {
+      return res.status(404).json({ message: "Categoría no encontrada" });
     }
 
     // Creamos y guardamos el nuevo servicio
-    const newService = new ServiceModel({ name, description, price });
+    const newService = new ServiceModel({
+      name,
+      description,
+      price,
+      category,
+      aliases: cleanStringArray(aliases),
+      tags: cleanStringArray(tags),
+    });
+
     const savedService = await newService.save();
 
     return res.status(201).json(savedService);
@@ -26,26 +77,54 @@ export const getServices = async (req, res) => {
   try {
     const { categoryId, q } = req.query;
 
-    // 🔍 Armamos el filtro condicional
+    // 🔍 Armamos el filtro condicional mínimo sin romper el front
     const filter = {};
 
     if (categoryId) {
       filter.category = categoryId;
     }
 
-    if (q) {
-      filter.name = { $regex: q, $options: 'i' }; // Búsqueda case-insensitive por nombre
+    const items = await ServiceModel.find(filter)
+      .select("name description price category aliases tags")
+      .lean();
+
+    if (!q) {
+      return res.json(items);
     }
 
-    const items = await ServiceModel.find(filter).select("name description price category");
-    res.json(items);
+    const normalizedQuery = normalizeText(q);
+    const categoryIds = [
+      ...new Set(
+        items
+          .map((item) => String(item.category || ""))
+          .filter(Boolean)
+      ),
+    ];
+
+    const categories = await CategoryModel.find({ _id: { $in: categoryIds } })
+      .select("_id name")
+      .lean();
+
+    const categoryNameById = new Map(
+      categories.map((category) => [String(category._id), String(category.name || "")])
+    );
+
+    const filteredItems = items.filter((item) => {
+      const categoryName = categoryNameById.get(String(item.category || "")) || "";
+      const searchText = buildSearchText(item, categoryName);
+      return searchText.includes(normalizedQuery);
+    });
+
+    return res.json(filteredItems);
   } catch (e) {
-    res.status(500).json({ message: "Error del servidor" });
+    return res.status(500).json({ message: "Error del servidor" });
   }
 };
 
 /*
 [CAMBIOS HECHOS AQUÍ]
-- Se tradujeron al español los mensajes visibles al usuario que estaban en inglés.
-- No se tocó la lógica de creación ni listado de servicios.
+- Se amplió createService para aceptar `category`, `aliases` y `tags`.
+- Se corrigió createService para crear servicios válidos con categoría (antes el modelo la requería y el controller no la pedía).
+- Se mejoró getServices para buscar por nombre, descripción, aliases, tags y nombre de categoría.
+- La búsqueda ahora ignora tildes y respeta la estructura que ya consumen FE WEB y MOBILE.
 */
