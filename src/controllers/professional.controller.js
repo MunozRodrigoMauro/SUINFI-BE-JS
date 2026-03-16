@@ -98,7 +98,7 @@ export const deleteMyDocument = async (req, res) => {
     if (!key) return res.status(400).json({ message: "Tipo de documento inválido" });
 
     const pro = await ProfessionalModel.findOne({ user: userId });
-    if (!pro) return res.status(404).json({ message: "Professional profile not found" });
+    if (!pro) return res.status(404).json({ message: "Perfil profesional no encontrado" });
 
     const prev = pro.documents?.[key] || null;
     if (prev?.url) safeUnlinkByUrl(prev.url);
@@ -111,7 +111,7 @@ export const deleteMyDocument = async (req, res) => {
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error("deleteMyDocument error:", e);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Error del servidor" });
   }
 };
 
@@ -121,7 +121,7 @@ export const createProfessionalProfile = async (req, res) => {
     const userRole = req.user.role;
 
     if (userRole !== "professional") {
-      return res.status(403).json({ message: "Only professionals can create profiles" });
+      return res.status(403).json({ message: "Solo los profesionales pueden crear perfiles" });
     }
 
     const {
@@ -148,7 +148,7 @@ export const createProfessionalProfile = async (req, res) => {
       loc = { type: "Point", coordinates: [Number(loc.lng), Number(loc.lat)] };
     }
     if (!loc || !Array.isArray(loc.coordinates) || loc.coordinates.length !== 2) {
-      return res.status(400).json({ message: "Location (lng, lat) es obligatorio" });
+      return res.status(400).json({ message: "La ubicación (lng, lat) es obligatoria" });
     }
 
     // Validación de seña
@@ -165,13 +165,13 @@ export const createProfessionalProfile = async (req, res) => {
     // Normalización de whatsapp
     let whatsappNormalized = undefined;
     if (whatsapp && (whatsapp.number || whatsapp.visible != null)) {
-      let countryGuess =
+      const countryGuess =
         (req.body?.nationality || address?.country || nationality || "").toString().toUpperCase();
       const out = { visible: !!whatsapp.visible };
       const raw = String(whatsapp.number || "").trim();
       if (raw) {
         const norm = normalizePhone(raw, countryGuess);
-        if (!norm) return res.status(400).json({ message: "INVALID_WHATSAPP_NUMBER" });
+        if (!norm) return res.status(400).json({ message: "Número de WhatsApp inválido" });
         out.number = norm.e164;
         out.country = norm.country || countryGuess || "";
         out.nationalNumber = norm.nationalNumber || "";
@@ -206,7 +206,7 @@ export const createProfessionalProfile = async (req, res) => {
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error("❌ Error al crear perfil:", error);
-    return res.status(500).json({ message: "Server error", error });
+    return res.status(500).json({ message: "Error del servidor", error });
   }
 };
 
@@ -339,7 +339,7 @@ export const getProfessionalById = async (req, res) => {
       });
 
     if (!professional || !professional.user) {
-      return res.status(404).json({ error: "Not found" });
+      return res.status(404).json({ error: "No encontrado" });
     }
 
     // ✅ [CAMBIO] BLOCKS: si viene token, no permitir ver detalle de un pro bloqueado
@@ -356,7 +356,7 @@ export const getProfessionalById = async (req, res) => {
     }
     // eslint-disable-next-line no-console
     console.error("❌ Error getting professional by ID:", error);
-    res.status(500).json({ error: "Server error" });
+    res.status(500).json({ error: "Error del servidor" });
   }
 };
 
@@ -374,7 +374,7 @@ export const getNearbyProfessionals = async (req, res) => {
     } = req.query;
 
     if (!lat || !lng)
-      return res.status(400).json({ error: "Latitude and longitude are required" });
+      return res.status(400).json({ error: "La latitud y longitud son obligatorias" });
 
     const query = {};
 
@@ -471,7 +471,7 @@ export const getNearbyProfessionals = async (req, res) => {
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("nearby error", err);
-    res.status(500).json({ error: "Server error" });
+    res.status(500).json({ error: "Error del servidor" });
   }
 };
 
@@ -480,7 +480,7 @@ export const updateAvailabilityNow = async (req, res) => {
     const userId = req.user.id;
     const { isAvailableNow } = req.body;
     if (typeof isAvailableNow !== "boolean") {
-      return res.status(400).json({ message: "Field 'isAvailableNow' must be a boolean" });
+      return res.status(400).json({ message: "El campo 'isAvailableNow' debe ser booleano" });
     }
 
     const before = await ProfessionalModel.findOne(
@@ -517,7 +517,7 @@ export const updateAvailabilityNow = async (req, res) => {
     ).populate({ path: "user", select: "verified", match: { verified: true } });
 
     if (!updated || !updated.user) {
-      return res.status(404).json({ message: "Professional profile not found" });
+      return res.status(404).json({ message: "Perfil profesional no encontrado" });
     }
 
     // eslint-disable-next-line no-console
@@ -536,14 +536,14 @@ export const updateAvailabilityNow = async (req, res) => {
     });
 
     res.json({
-      message: "Availability updated",
+      message: "Disponibilidad actualizada",
       isAvailableNow: updated.isAvailableNow,
       availabilityStrategy: updated.availabilityStrategy,
     });
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error("❌ Error updating availability:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Error del servidor" });
   }
 };
 
@@ -585,7 +585,7 @@ export const getAvailableNowProfessionals = async (req, res) => {
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error("❌ Error getting available professionals:", error);
-    res.status(500).json({ error: "Server error" });
+    res.status(500).json({ error: "Error del servidor" });
   }
 };
 
@@ -594,13 +594,13 @@ export const updateAvailabilitySchedule = async (req, res) => {
     const userId = req.user.id;
     const raw = req.body?.availabilitySchedule;
     if (!raw || typeof raw !== "object") {
-      return res.status(400).json({ error: "Invalid availabilitySchedule" });
+      return res.status(400).json({ error: "availabilitySchedule inválido" });
     }
 
     const re = /^\d{2}:\d{2}$/;
     for (const [day, slot] of Object.entries(raw)) {
       if (!slot?.from || !slot?.to || !re.test(slot.from) || !re.test(slot.to)) {
-        return res.status(400).json({ error: `Bad time range for '${day}'` });
+        return res.status(400).json({ error: `Rango horario inválido para '${day}'` });
       }
     }
 
@@ -614,7 +614,7 @@ export const updateAvailabilitySchedule = async (req, res) => {
 
     const shouldBeOn = isSuspended ? false : isNowWithinSchedule(schedule);
 
-    let saved = await ProfessionalModel.findOneAndUpdate(
+    const saved = await ProfessionalModel.findOneAndUpdate(
       { user: userId },
       {
         $set: {
@@ -627,7 +627,7 @@ export const updateAvailabilitySchedule = async (req, res) => {
     );
 
     if (!saved) {
-      return res.status(404).json({ error: "Professional profile not found" });
+      return res.status(404).json({ error: "Perfil profesional no encontrado" });
     }
 
     const plain =
@@ -641,7 +641,7 @@ export const updateAvailabilitySchedule = async (req, res) => {
     io?.to(payload.userId).emit("availability:self", payload);
 
     return res.json({
-      message: "Availability updated",
+      message: "Disponibilidad actualizada",
       availabilitySchedule: plain,
       availabilityStrategy: saved.availabilityStrategy,
       isAvailableNow: saved.isAvailableNow,
@@ -649,7 +649,7 @@ export const updateAvailabilitySchedule = async (req, res) => {
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error("❌ Error updating availabilitySchedule:", error);
-    return res.status(500).json({ error: "Server error" });
+    return res.status(500).json({ error: "Error del servidor" });
   }
 };
 
@@ -668,7 +668,7 @@ export const getMyProfessional = async (req, res) => {
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error("getMyProfessional error", e);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Error del servidor" });
   }
 };
 
@@ -677,7 +677,7 @@ export const setAvailabilityMode = async (req, res) => {
     const userId = req.user.id;
     const { mode } = req.body; // "manual" | "schedule"
     if (!["manual", "schedule"].includes(mode)) {
-      return res.status(400).json({ message: "Invalid mode" });
+      return res.status(400).json({ message: "Modo inválido" });
     }
     const updated = await ProfessionalModel.findOneAndUpdate(
       { user: userId },
@@ -690,14 +690,14 @@ export const setAvailabilityMode = async (req, res) => {
     });
 
     if (!updated || !updated.user) {
-      return res.status(404).json({ message: "Professional profile not found" });
+      return res.status(404).json({ message: "Perfil profesional no encontrado" });
     }
     res.json({
-      message: "Mode updated",
+      message: "Modo actualizado",
       availabilityStrategy: updated.availabilityStrategy,
     });
   } catch (e) {
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Error del servidor" });
   }
 };
 
@@ -721,7 +721,7 @@ export const updateMyLocation = async (req, res) => {
     ).populate({ path: "user", select: "verified", match: { verified: true } });
 
     if (!pro || !pro.user) {
-      return res.status(404).json({ error: "Professional profile not found" });
+      return res.status(404).json({ error: "Perfil profesional no encontrado" });
     }
 
     const io = req.app.get("io");
@@ -737,7 +737,7 @@ export const updateMyLocation = async (req, res) => {
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error("updateMyLocation error", e);
-    res.status(500).json({ error: "Server error" });
+    res.status(500).json({ error: "Error del servidor" });
   }
 };
 
@@ -750,7 +750,7 @@ export const uploadMyDocument = async (req, res) => {
     if (!req.file) return res.status(400).json({ message: "Archivo requerido (PDF)" });
 
     const pro = await ProfessionalModel.findOne({ user: userId });
-    if (!pro) return res.status(404).json({ message: "Professional profile not found" });
+    if (!pro) return res.status(404).json({ message: "Perfil profesional no encontrado" });
 
     const rel = path.posix.join("/uploads", "docs", String(userId), req.file.filename);
     const uploadedAt = new Date();
@@ -775,7 +775,7 @@ export const uploadMyDocument = async (req, res) => {
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error("uploadMyDocument error:", e);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Error del servidor" });
   }
 };
 
@@ -786,7 +786,7 @@ export const getDocsMeta = async (req, res) => {
       select: "verified",
       match: { verified: true },
     });
-    if (!pro || !pro.user) return res.status(404).json({ message: "Not found" });
+    if (!pro || !pro.user) return res.status(404).json({ message: "No encontrado" });
 
     const now = Date.now();
     const cr = pro.documents?.criminalRecord || null;
@@ -808,7 +808,7 @@ export const getDocsMeta = async (req, res) => {
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error("getDocsMeta error:", e);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Error del servidor" });
   }
 };
 
@@ -816,7 +816,7 @@ export const updateMyProfessional = async (req, res) => {
   try {
     const userId = req.user.id;
     const current = await ProfessionalModel.findOne({ user: userId });
-    if (!current) return res.status(404).json({ message: "Professional profile not found" });
+    if (!current) return res.status(404).json({ message: "Perfil profesional no encontrado" });
 
     const allowed = [
       "bio","phone","showPhone","services","nationality",
@@ -875,13 +875,13 @@ export const updateMyProfessional = async (req, res) => {
       { new: true, runValidators: true }
     ).populate({ path: "user", select: "name email verified", match: { verified: true } });
 
-    if (!updated || !updated.user) return res.status(404).json({ message: "Professional profile not found" });
+    if (!updated || !updated.user) return res.status(404).json({ message: "Perfil profesional no encontrado" });
 
-    res.json({ message: "Professional updated", professional: updated });
+    res.json({ message: "Perfil profesional actualizado", professional: updated });
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error("updateMyProfessional error", e);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Error del servidor" });
   }
 };
 
@@ -890,12 +890,12 @@ export const getMyPayout = async (req, res) => {
   try {
     const userId = req.user.id;
     const pro = await ProfessionalModel.findOne({ user: userId }).select("payout");
-    if (!pro) return res.status(404).json({ message: "Professional profile not found" });
+    if (!pro) return res.status(404).json({ message: "Perfil profesional no encontrado" });
     res.json(pro.payout || {});
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error("getMyPayout error", e);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Error del servidor" });
   }
 };
 
@@ -920,23 +920,18 @@ export const updateMyPayout = async (req, res) => {
       { new: true, runValidators: true }
     ).select("payout");
 
-    if (!updated) return res.status(404).json({ message: "Professional profile not found" });
-    res.json({ message: "Payout updated", payout: updated.payout });
+    if (!updated) return res.status(404).json({ message: "Perfil profesional no encontrado" });
+    res.json({ message: "Payout actualizado", payout: updated.payout });
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error("updateMyPayout error", e);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Error del servidor" });
   }
 };
 
 /*
 [CAMBIOS HECHOS AQUÍ]
-- getProfessionals: ahora acepta `services` como CSV o array además de `serviceId` y lo cruza con `categoryId` si llega. [CHANGE GP-CSV]
-- getNearbyProfessionals: igual que arriba, acepta `services` CSV/array + `serviceId` y mantiene consulta geoespacial con $near. [CHANGE NEAR-CSV]
-- En ambos: agregué logs `console.log` (// CHANGES) para corroborar filtros recibidos y tamaño de resultados.
-- En schedule (availableNow !== "true"), NO filtrar por disponibilidad (se retorna el set filtrado por área/ubicación).
-
-// ✅ [CAMBIO] BLOCKS:
-- getProfessionals / getNearbyProfessionals / getAvailableNowProfessionals: si viene Authorization Bearer token, excluyen profesionales bloqueados (query.user $nin).
-- getProfessionalById: si viene token, devuelve 403 si el usuario está bloqueado en cualquiera de los dos sentidos.
+- Se tradujeron al español los mensajes visibles al usuario que estaban en inglés.
+- Se mantuvieron intactas las validaciones, filtros, blocks y lógica existente.
+- No se tocaron los códigos o mensajes internos tipo "blocked" / "SUSPENDED" para no romper integraciones ya existentes.
 */

@@ -18,18 +18,18 @@ export const loginUser = async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password)
-      return res.status(400).json({ message: "Email and password required" });
+      return res.status(400).json({ message: "Email y contraseña requeridos" });
 
     const user = await UserModel.findOne({ email });
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
+    if (!isMatch) return res.status(401).json({ message: "Credenciales inválidas" });
 
     if (!user.verified) {
       return res.status(403).json({
         code: "EMAIL_NOT_VERIFIED",
-        message: "Por favor, veririca tu email para continuar.",
+        message: "Por favor, verificá tu email para continuar.",
       });
     }
 
@@ -47,7 +47,7 @@ export const loginUser = async (req, res) => {
       user: { id: user._id, name: user.name, email: user.email, role: user.role },
     });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error });
+    res.status(500).json({ message: "Error del servidor", error });
   }
 };
 
@@ -55,7 +55,7 @@ export const loginUser = async (req, res) => {
 export const verifyEmailByToken = async (req, res) => {
   try {
     const { token } = req.params;
-    if (!token) return res.status(400).json({ message: "Missing token" });
+    if (!token) return res.status(400).json({ message: "Falta el token" });
 
     const user = await UserModel.findOne({
       "emailVerification.token": token,
@@ -78,7 +78,7 @@ export const verifyEmailByToken = async (req, res) => {
 
     return res.status(200).json({ message: "Correo electrónico verificado exitosamente" });
   } catch (e) {
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Error del servidor" });
   }
 };
 
@@ -86,10 +86,10 @@ export const verifyEmailByToken = async (req, res) => {
 export const resendVerification = async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email) return res.status(400).json({ message: "Email required" });
+    if (!email) return res.status(400).json({ message: "Email requerido" });
 
     const user = await UserModel.findOne({ email });
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
     if (user.verified) return res.status(200).json({ message: "Usuario ya verificado" });
 
     const token = crypto.randomBytes(32).toString("hex");
@@ -138,8 +138,10 @@ export async function requestPasswordReset(req, res) {
         user.name || user.email,
         rawToken
       );
+      // eslint-disable-next-line no-console
       console.log("reset mail result:", result);
     } catch (e) {
+      // eslint-disable-next-line no-console
       console.error("❌ reset mail error:", e?.message || e);
       // 👇 AHORA SÍ devolvemos error si el mail falla
       return res
@@ -151,8 +153,9 @@ export async function requestPasswordReset(req, res) {
       message: "Si el email existe, te enviamos instrucciones.",
     });
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error("❌ requestPasswordReset error:", e);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Error del servidor" });
   }
 }
 
@@ -200,9 +203,9 @@ export async function confirmPasswordReset(req, res) {
 export const debugGetUserByEmail = async (req, res) => {
   try {
     const { email } = req.query;
-    if (!email) return res.status(400).json({ message: "Missing email" });
+    if (!email) return res.status(400).json({ message: "Falta el email" });
     const user = await UserModel.findOne({ email }).lean();
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
     return res.json({
       id: user._id,
       email: user.email,
@@ -212,16 +215,16 @@ export const debugGetUserByEmail = async (req, res) => {
       resetExp: user.passwordResetExpiresAt,
     });
   } catch (e) {
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Error del servidor" });
   }
 };
 
 export const debugRegenerateToken = async (req, res) => {
   try {
     const { email, send = "false" } = req.body || {};
-    if (!email) return res.status(400).json({ message: "Missing email" });
+    if (!email) return res.status(400).json({ message: "Falta el email" });
     const user = await UserModel.findOne({ email });
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
 
     const token = crypto.randomBytes(32).toString("hex").toLowerCase();
     const expires = new Date(Date.now() + 1000 * 60 * 60 * 48);
@@ -235,12 +238,19 @@ export const debugRegenerateToken = async (req, res) => {
     }
 
     return res.json({
-      message: "Token regenerated",
+      message: "Token regenerado",
       email: user.email,
       token,
       expiresAt: expires,
     });
   } catch (e) {
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Error del servidor" });
   }
 };
+
+/*
+[CAMBIOS HECHOS AQUÍ]
+- Se tradujeron al español los mensajes visibles al usuario que estaban en inglés.
+- Se corrigió el typo de “veririca” por “verificá”.
+- No se tocó la lógica del flujo de login, verificación ni reset.
+*/

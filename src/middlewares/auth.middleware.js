@@ -6,7 +6,7 @@ export const verifyToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization || req.headers.Authorization;
     if (!authHeader || !/^Bearer\s+/i.test(String(authHeader))) {
-      return res.status(401).json({ message: "No token provided" });
+      return res.status(401).json({ message: "No se proporcionó token" });
     }
     const raw = String(authHeader).replace(/^Bearer\s+/i, "").trim();
     const match = raw.match(/[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+/);
@@ -18,14 +18,14 @@ export const verifyToken = async (req, res, next) => {
     try {
       decoded = jwt.verify(token, secret);
     } catch {
-      return res.status(401).json({ message: "Invalid or expired token" });
+      return res.status(401).json({ message: "Token inválido o vencido" });
     }
 
     const decodedId =
       decoded && typeof decoded === "object" ? decoded.id || decoded._id : null;
 
     if (!decodedId) {
-      return res.status(401).json({ message: "Invalid or expired token" });
+      return res.status(401).json({ message: "Token inválido o vencido" });
     }
 
     const user = await UserModel.findById(decodedId).select("-password");
@@ -47,20 +47,20 @@ export const verifyToken = async (req, res, next) => {
     }
     next();
   } catch {
-    return res.status(401).json({ message: "Invalid or expired token" });
+    return res.status(401).json({ message: "Token inválido o vencido" });
   }
 };
 
 export const requireAdmin = (req, res, next) => {
   const role = String(req.user?.role || "").toLowerCase();
   if (role !== "admin") {
-    return res.status(403).json({ message: "Admin only" });
+    return res.status(403).json({ message: "Solo administradores" });
   }
   next();
 };
 
 /*
 [CAMBIOS HECHOS AQUÍ]
-- Se sacaron console.* (no-console).
-- Se unificó el secret JWT (JWT_SECRET || JWT_KEY || "changeme") y se soporta decoded.id / decoded._id.
+- Se tradujeron al español los mensajes visibles al usuario que estaban en inglés.
+- Se mantuvo la lógica actual del middleware intacta.
 */

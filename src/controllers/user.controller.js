@@ -20,14 +20,14 @@ export const createUser = async (req, res) => {
     if (role === "client") role = "user";
 
     if (!name || !email || !password || !role) {
-      return res.status(400).json({ message: "Missing required fields" });
+      return res.status(400).json({ message: "Faltan campos obligatorios" });
     }
 
     const userExist = await UserModel.findOne({ email });
     if (userExist) {
       return res.status(409).json({
         code: "EMAIL_TAKEN", // <-- agregado
-        message: "Email already registered"
+        message: "El email ya está registrado"
       });
     }    
 
@@ -52,14 +52,15 @@ export const createUser = async (req, res) => {
     try {
       await sendVerificationEmail(savedUser.email, verifyToken);
     } catch (e) {
+      // eslint-disable-next-line no-console
       console.error("❌ Error enviando correo de verificación:", e);
     }
 
     return res.status(201).json({
-      message: "User created. Please verify your email.",
+      message: "Usuario creado. Por favor, verificá tu email.",
     });
   } catch (error) {
-    return res.status(500).json({ message: "Server error", error });
+    return res.status(500).json({ message: "Error del servidor", error });
   }
 };
 
@@ -69,7 +70,7 @@ export const getUsers = async (_req, res) => {
     const users = await UserModel.find();
     return res.status(200).json(users);
   } catch (error) {
-    return res.status(500).json({ message: "Server error", error });
+    return res.status(500).json({ message: "Error del servidor", error });
   }
 };
 
@@ -77,11 +78,12 @@ export const getUsers = async (_req, res) => {
 export const getMe = async (req, res) => {
   try {
     const me = await UserModel.findById(req.user.id).lean();
-    if (!me) return res.status(404).json({ message: "User not found" });
+    if (!me) return res.status(404).json({ message: "Usuario no encontrado" });
     res.json(me);
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error("getMe error", e);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Error del servidor" });
   }
 };
 
@@ -95,7 +97,7 @@ export const updateMe = async (req, res) => {
 
     // Leemos el doc actual para usarlo de fallback de región
     const current = await UserModel.findById(userId).lean();
-    if (!current) return res.status(404).json({ message: "User not found" });
+    if (!current) return res.status(404).json({ message: "Usuario no encontrado" });
 
     // Campos permitidos (se agregan whatsapp.* y nationality)
     const allowed = [
@@ -118,7 +120,7 @@ export const updateMe = async (req, res) => {
 
     const payload = {};
     if (req.body.name != null) {
-      payload.name = capitalizeWords(String(payload.name).slice(0, 50));
+      payload.name = capitalizeWords(String(req.body.name).slice(0, 50));
     }
     for (const key of allowed) {
       const parts = key.split(".");
@@ -160,7 +162,7 @@ export const updateMe = async (req, res) => {
         if (raw) {
           const norm = normalizePhone(raw, regionFallback);
           if (!norm) {
-            return res.status(400).json({ message: "INVALID_WHATSAPP_NUMBER" });
+            return res.status(400).json({ message: "Número de WhatsApp inválido" });
           }
           payload.whatsapp.number = norm.e164;
           payload.whatsapp.country = norm.country || regionFallback || "";
@@ -182,7 +184,7 @@ export const updateMe = async (req, res) => {
       { new: true }
     ).lean();
 
-    if (!updatedUser) return res.status(404).json({ message: "User not found" });
+    if (!updatedUser) return res.status(404).json({ message: "Usuario no encontrado" });
 
     // Si es profesional, reflejar address + GeoJSON (igual que antes)
     if (updatedUser.role === "professional") {
@@ -245,10 +247,11 @@ export const updateMe = async (req, res) => {
       }
     }
 
-    res.json({ message: "User updated", user: updatedUser });
+    res.json({ message: "Usuario actualizado", user: updatedUser });
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error("updateMe error", e);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Error del servidor" });
   }
 };
 
@@ -266,8 +269,9 @@ export const getMyProfile = async (req, res) => {
 
     res.json({ user: u, requiresOnboarding });
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error("❌ getMyProfile:", e);
-    res.status(500).json({ error: "Server error" });
+    res.status(500).json({ error: "Error del servidor" });
   }
 };
 
@@ -286,8 +290,9 @@ export const deleteMe = async (req, res) => {
 
     return res.json({ message: "Cuenta eliminada" });
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error("deleteMe error", e);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Error del servidor" });
   }
 };
 
@@ -304,10 +309,11 @@ export const deleteUser = async (req, res) => {
 
     await UserModel.findByIdAndDelete(id);
 
-    return res.json({ message: "User eliminado y perfiles limpiados" });
+    return res.json({ message: "Usuario eliminado y perfiles limpiados" });
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error("deleteUser error", e);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Error del servidor" });
   }
 };
 
@@ -336,8 +342,9 @@ export const uploadMyAvatar = async (req, res) => {
 
     return res.json({ message: "Avatar actualizado", url: rel, user: updated });
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error("uploadMyAvatar error:", e);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Error del servidor" });
   }
 };
 
@@ -377,6 +384,7 @@ export const deleteMyAvatar = async (req, res) => {
           }
         );
       } catch (proError) {
+        // eslint-disable-next-line no-console
         console.error("Error al actualizar profesional:", proError);
       }
     }
@@ -387,6 +395,7 @@ export const deleteMyAvatar = async (req, res) => {
     });
 
   } catch (error) {
+    // eslint-disable-next-line no-console
     console.error("deleteMyAvatar error:", error);
     return res.status(500).json({ message: "Error del servidor" });
   }
@@ -399,12 +408,12 @@ export const addMyPushToken = async (req, res) => {
     if (!userId) return res.status(401).json({ message: "No autorizado" });
 
     const token = String(req.body?.token || "").trim();
-    if (!token) return res.status(400).json({ message: "Missing token" });
+    if (!token) return res.status(400).json({ message: "Falta el token" });
 
     const isExpo =
       token.startsWith("ExponentPushToken[") || token.startsWith("ExpoPushToken[");
     if (!isExpo) {
-      return res.status(400).json({ message: "INVALID_PUSH_TOKEN" });
+      return res.status(400).json({ message: "Token push inválido" });
     }
 
     await UserModel.updateOne(
@@ -414,8 +423,9 @@ export const addMyPushToken = async (req, res) => {
 
     return res.json({ ok: true });
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error("addMyPushToken error:", e);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Error del servidor" });
   }
 };
 
@@ -426,7 +436,7 @@ export const removeMyPushToken = async (req, res) => {
     if (!userId) return res.status(401).json({ message: "No autorizado" });
 
     const token = String(req.body?.token || "").trim();
-    if (!token) return res.status(400).json({ message: "Missing token" });
+    if (!token) return res.status(400).json({ message: "Falta el token" });
 
     await UserModel.updateOne(
       { _id: userId },
@@ -435,7 +445,15 @@ export const removeMyPushToken = async (req, res) => {
 
     return res.json({ ok: true });
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error("removeMyPushToken error:", e);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Error del servidor" });
   }
 };
+
+/*
+[CAMBIOS HECHOS AQUÍ]
+- Se tradujeron al español los mensajes visibles al usuario que estaban en inglés.
+- Se mantuvieron intactas las validaciones, flujos y códigos existentes.
+- Se corrigió un bug en updateMe: al capitalizar name ahora toma req.body.name y no payload.name.
+*/
