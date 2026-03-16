@@ -1,5 +1,10 @@
+// src/routes/service.routes.js
 import express from "express";
-import { createService, getServices } from "../controllers/service.controller.js";
+import {
+  createService,
+  getServices,
+  suggestService,
+} from "../controllers/service.controller.js";
 import { verifyToken } from "../middlewares/auth.middleware.js"; // 🛡️ Protegemos si querés después
 import { isAdmin } from "../middlewares/role.middleware.js";
 
@@ -13,4 +18,13 @@ router.post("/", verifyToken, isAdmin, createService); // Solo logueados ✅ Sol
 // Obtener todos los servicios disponibles
 router.get("/", getServices);
 
+// Sugerir un servicio faltante
+router.post("/suggestions", verifyToken, suggestService);
+
 export default router;
+
+/*
+[CAMBIOS HECHOS AQUÍ]
+- Se agregó POST /api/services/suggestions para recibir sugerencias desde Mobile.
+- Se protegió con verifyToken para usar el usuario autenticado y no tocar otros flujos.
+*/

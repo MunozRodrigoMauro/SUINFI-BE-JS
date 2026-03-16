@@ -212,6 +212,70 @@ export async function sendNotificationEmail({ to, subject, html, text }) {
   return { ok: true, id: info?.messageId };
 }
 
+export async function sendServiceSuggestionEmail({
+  suggestedName,
+  details,
+  userName,
+  userEmail,
+  userRole,
+}) {
+  const { SMTP_SUPPORT } = getConfig();
+
+  const safeSuggestedName = String(suggestedName || "").trim();
+  const safeDetails = String(details || "").trim();
+  const safeUserName = String(userName || "").trim();
+  const safeUserEmail = String(userEmail || "").trim();
+  const safeUserRole = String(userRole || "").trim();
+
+  const subject = "Nueva sugerencia de servicio – CuyIT";
+
+  const text = [
+    "Nueva sugerencia de servicio/profesión",
+    "",
+    `Sugerencia: ${safeSuggestedName}`,
+    `Detalle: ${safeDetails || "Sin detalle adicional"}`,
+    "",
+    "Usuario",
+    `Nombre: ${safeUserName || "No disponible"}`,
+    `Email: ${safeUserEmail || "No disponible"}`,
+    `Rol: ${safeUserRole || "No disponible"}`,
+  ].join("\n");
+
+  const html = `
+  <div style="margin:0;padding:24px;background:#f7f8fb;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#0f172a">
+    <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:16px;padding:24px">
+      <div style="font-weight:800;font-size:22px;letter-spacing:.5px;color:#1f2a44;margin-bottom:16px;">CuyIT</div>
+      <h2 style="margin:0 0 16px 0;font-size:20px;color:#111827;">Nueva sugerencia de servicio</h2>
+
+      <div style="margin-bottom:16px;padding:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
+        <div style="font-size:12px;color:#64748b;margin-bottom:6px;">SUGERENCIA</div>
+        <div style="font-size:18px;font-weight:700;color:#111827;">${safeSuggestedName}</div>
+      </div>
+
+      <div style="margin-bottom:16px;padding:16px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;">
+        <div style="font-size:12px;color:#64748b;margin-bottom:6px;">DETALLE</div>
+        <div style="font-size:14px;line-height:1.6;color:#334155;">${safeDetails || "Sin detalle adicional"}</div>
+      </div>
+
+      <div style="padding:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
+        <div style="font-size:12px;color:#64748b;margin-bottom:10px;">USUARIO</div>
+        <div style="font-size:14px;line-height:1.8;color:#334155;">
+          <div><strong>Nombre:</strong> ${safeUserName || "No disponible"}</div>
+          <div><strong>Email:</strong> ${safeUserEmail || "No disponible"}</div>
+          <div><strong>Rol:</strong> ${safeUserRole || "No disponible"}</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  return sendNotificationEmail({
+    to: SMTP_SUPPORT || "info@cuyit.com",
+    subject,
+    text,
+    html,
+  });
+}
+
 export async function debugVerifySmtp() {
   const t = await getTransporter();
   if (t) {
@@ -220,3 +284,9 @@ export async function debugVerifySmtp() {
     console.log("⚠️ SMTP deshabilitado o credenciales inválidas. Se usarán logs [DEV].");
   }
 }
+
+/*
+[CAMBIOS HECHOS AQUÍ]
+- Se agregó sendServiceSuggestionEmail para mandar sugerencias internas a info@cuyit.com.
+- Se reutilizó la infraestructura existente de mail sin tocar los flujos previos de verificación, reset o notificaciones.
+*/

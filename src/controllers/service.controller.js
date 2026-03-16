@@ -1,6 +1,7 @@
 // src/controllers/service.controller.js
 import ServiceModel from "../models/Service.js";
 import CategoryModel from "../models/Category.js";
+import { sendServiceSuggestionEmail } from "../services/mailer.js";
 
 function normalizeText(value = "") {
   return String(value || "")
@@ -40,7 +41,14 @@ function buildSearchText(service, categoryName = "") {
 // 📌 Crear un nuevo servicio
 export const createService = async (req, res) => {
   try {
-    const { name, description, price, category, aliases = [], tags = [] } = req.body;
+    const {
+      name,
+      description,
+      price,
+      category,
+      aliases = [],
+      tags = [],
+    } = req.body;
 
     // Validamos campos requeridos
     if (!name || price === undefined || !category) {
@@ -121,10 +129,43 @@ export const getServices = async (req, res) => {
   }
 };
 
+export const suggestService = async (req, res) => {
+  try {
+    const suggestedName = String(req.body?.suggestedName || "").trim();
+    const details = String(req.body?.details || "").trim();
+
+    if (suggestedName.length < 2) {
+      return res.status(400).json({
+        message: "La sugerencia debe tener al menos 2 caracteres",
+      });
+    }
+
+    const userName = String(req.user?.name || "").trim();
+    const userEmail = String(req.user?.email || "").trim();
+    const userRole = String(req.user?.role || "").trim();
+
+    await sendServiceSuggestionEmail({
+      suggestedName,
+      details,
+      userName,
+      userEmail,
+      userRole,
+    });
+
+    return res.status(200).json({
+      message: "Sugerencia enviada correctamente",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "No pudimos enviar la sugerencia. Probá más tarde.",
+    });
+  }
+};
+
 /*
 [CAMBIOS HECHOS AQUÍ]
-- Se amplió createService para aceptar `category`, `aliases` y `tags`.
-- Se corrigió createService para crear servicios válidos con categoría (antes el modelo la requería y el controller no la pedía).
-- Se mejoró getServices para buscar por nombre, descripción, aliases, tags y nombre de categoría.
-- La búsqueda ahora ignora tildes y respeta la estructura que ya consumen FE WEB y MOBILE.
+- Se mantuvo createService compatible con category, aliases y tags.
+- Se mantiene getServices buscando por nombre, descripción, aliases, tags y categoría.
+- Se agregó suggestService para recibir sugerencias de servicios faltantes desde Mobile.
+- suggestService usa el usuario autenticado y dispara un mail interno sin cambiar el contrato principal del front.
 */
