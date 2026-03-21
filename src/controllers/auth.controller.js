@@ -172,7 +172,7 @@ export async function confirmPasswordReset(req, res) {
     /[a-z]/.test(newPassword) &&
     /[A-Z]/.test(newPassword) &&
     /\d/.test(newPassword) &&
-    /[!@#$%^&*]/.test(newPassword);
+    /[^A-Za-z0-9]/.test(newPassword);
 
   if (!strong) {
     return res.status(400).json({
@@ -250,7 +250,7 @@ export const debugRegenerateToken = async (req, res) => {
 
 /*
 [CAMBIOS HECHOS AQUÍ]
-- Se tradujeron al español los mensajes visibles al usuario que estaban en inglés.
-- Se corrigió el typo de “veririca” por “verificá”.
-- No se tocó la lógica del flujo de login, verificación ni reset.
+- En confirmPasswordReset se alineó la validación de símbolo con el registro/mobile:
+  ahora acepta cualquier carácter no alfanumérico, por ejemplo ".".
+- Se mantuvo intacta la lógica del resto del archivo.
 */

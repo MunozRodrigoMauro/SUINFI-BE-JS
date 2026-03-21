@@ -17,7 +17,7 @@ export const userValidationRules = [
     .isEmail()
     .withMessage("Must be a valid email"),
 
-  // 📌 Validamos que la contraseña tenga mínimo 6 caracteres
+  // 📌 Validamos que la contraseña tenga mínimo 8 caracteres
   body("password")
     .isLength({ min: 8 })
     .withMessage("La contraseña debe tener al menos 8 caracteres.")
@@ -27,8 +27,8 @@ export const userValidationRules = [
     .withMessage("La contraseña debe contener al menos una letra mayúscula.")
     .matches(/\d/)
     .withMessage("La contraseña debe contener al menos un número.")
-    .matches(/[!@#$%^&*]/)
-    .withMessage("La contraseña debe contener al menos un carácter especial (!@#$%^&*)"),
+    .matches(/[^A-Za-z0-9]/)
+    .withMessage("La contraseña debe contener al menos un símbolo."),
 
   // 🟩 Buena práctica: validamos que el role sea uno válido
   body("role")
@@ -37,3 +37,10 @@ export const userValidationRules = [
     .withMessage("Invalid role")
 ];
 
+/*
+[CAMBIOS HECHOS AQUÍ]
+- En la validación de password se reemplazó la regex del símbolo:
+  antes solo aceptaba !@#$%^&*
+  ahora acepta cualquier carácter no alfanumérico, para que coincida con mobile.
+- No se tocó ninguna otra validación.
+*/
