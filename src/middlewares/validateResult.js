@@ -34,7 +34,6 @@ export const validateResult = (req, res, next) => {
 
 /*
 [CAMBIOS HECHOS AQUÍ]
-- Se agregó `message` con el primer error de validación para que el frontend pueda mostrar
-  un mensaje claro al usuario en vez de un genérico.
-- Se mantuvo `errors` para no romper compatibilidad con otras pantallas o consumidores.
+- Se agregó `message` con el primer error para que el frontend muestre un texto claro.
+- Se mantuvo `errors` para no romper compatibilidad con otras pantallas.
 */

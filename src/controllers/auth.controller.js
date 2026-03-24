@@ -188,7 +188,7 @@ export async function confirmPasswordReset(req, res) {
     passwordResetExpiresAt: { $gt: now },
   });
 
-  if (!user) return res.status(400).json({ message: "Token inválido o vencido" });
+  if (!user) return res.status(400).json({ message: "El enlace no es válido o venció" });
 
   const salt = await bcrypt.genSalt(10);
   user.password = await bcrypt.hash(newPassword, salt);
@@ -252,5 +252,7 @@ export const debugRegenerateToken = async (req, res) => {
 [CAMBIOS HECHOS AQUÍ]
 - En confirmPasswordReset se alineó la validación de símbolo con el registro/mobile:
   ahora acepta cualquier carácter no alfanumérico, por ejemplo ".".
+- Se cambió el mensaje final de token inválido por uno más claro para usuario:
+  "El enlace no es válido o venció".
 - Se mantuvo intacta la lógica del resto del archivo.
 */
