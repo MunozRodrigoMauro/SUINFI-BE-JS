@@ -1,3 +1,4 @@
+// src/controllers/payment.controller.js
 import PaymentModel from "../models/Payment.js";
 import BookingModel from "../models/Booking.js";
 

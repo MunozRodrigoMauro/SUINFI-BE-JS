@@ -807,10 +807,3 @@ export const fallbackImmediateBookingNow = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
-
-/*
-✅ [CAMBIO] BLOCKS:
-- createBooking: impide reservar si el cliente y el profesional están bloqueados (403 blocked).
-- createBooking (auto-assign inmediata): pasa excludeUserIds al matcher para que nunca elija un pro bloqueado.
-- fallbackImmediateBookingNow: también excluye bloqueados al reasignar.
-*/

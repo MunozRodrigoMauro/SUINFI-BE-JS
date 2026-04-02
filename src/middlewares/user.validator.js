@@ -36,10 +36,3 @@ export const userValidationRules = [
     .isIn(["user", "professional", "admin", "client"])
     .withMessage("Invalid role")
 ];
-
-/*
-[CAMBIOS HECHOS AQUÍ]
-- Se alineó la validación del símbolo con mobile y reset password:
-  ahora acepta cualquier carácter no alfanumérico y no solo !@#$%^&*.
-- No se tocó ninguna otra validación.
-*/

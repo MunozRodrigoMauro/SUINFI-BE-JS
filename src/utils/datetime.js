@@ -1,3 +1,4 @@
+// src/utils/datetime.js
 // Utilidades mínimas para formatear fecha/hora y estados
 export const formatDateTime = (iso) => {
     try {

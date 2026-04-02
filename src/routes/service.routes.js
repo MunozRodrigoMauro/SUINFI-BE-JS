@@ -22,9 +22,3 @@ router.get("/", getServices);
 router.post("/suggestions", verifyToken, suggestService);
 
 export default router;
-
-/*
-[CAMBIOS HECHOS AQUÍ]
-- Se agregó POST /api/services/suggestions para recibir sugerencias desde Mobile.
-- Se protegió con verifyToken para usar el usuario autenticado y no tocar otros flujos.
-*/

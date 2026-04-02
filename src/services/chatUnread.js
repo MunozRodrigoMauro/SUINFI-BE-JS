@@ -1,7 +1,4 @@
-// api.cuyit.com/src/services/chatUnread.js
-// Helper para calcular no leídos por usuario.
-// Devuelve: { total, byConversation: Map<string, number>, list: Array<{ chatId, count }> }
-
+// src/services/chatUnread.js
 import mongoose from "mongoose";
 import Message from "../models/Message.js";
 
@@ -40,4 +37,3 @@ export async function getUnreadTotal(userId) {
   const { total } = await getUnreadSummary(userId);
   return total;
 }
-Te 

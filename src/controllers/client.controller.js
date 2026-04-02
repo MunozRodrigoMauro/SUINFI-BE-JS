@@ -1,3 +1,4 @@
+// src/controllers/client.controller.js
 import ClientModel from "../models/Client.js";
 
 export const createClientProfile = async (req, res) => {

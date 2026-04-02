@@ -1,3 +1,4 @@
+// src/models/Payment.js
 import mongoose from "mongoose";
 
 const refundSchema = new mongoose.Schema(

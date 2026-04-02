@@ -1,3 +1,4 @@
+// src/routes/payments.routes.js
 import express from "express";
 import { verifyToken, requireAdmin } from "../middlewares/auth.middleware.js";
 import { createPayment as createPaymentManual } from "../controllers/payment.controller.js";

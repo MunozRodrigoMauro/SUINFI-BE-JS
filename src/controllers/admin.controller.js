@@ -1,3 +1,5 @@
+// src/controllers/admin.controller.js
+
 import AdminModel from "../models/Admin.js";
 
 export const createAdminProfile = async (req, res) => {

@@ -1,3 +1,4 @@
+// src/seed/cleanup-unverified-users.js
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import UserModel from "../models/User.js";

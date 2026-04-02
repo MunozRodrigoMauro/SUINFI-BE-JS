@@ -1,3 +1,4 @@
+// src/models/Payout.js
 import mongoose from "mongoose";
 
 const payoutSchema = new mongoose.Schema(

@@ -1,6 +1,4 @@
 // src/routes/auth.routes.js
-// 🛠 CAMBIO: se agregan rutas para OAuth Google (client/professional) y callback
-
 import express from "express";
 import {
   loginUser,

@@ -1,3 +1,4 @@
+// src/controllers/favorite.controller.js
 import UserModel from "../models/User.js";
 import ProfessionalModel from "../models/Professional.js";
 

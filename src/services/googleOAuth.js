@@ -1,6 +1,4 @@
 // src/services/googleOAuth.js
-// 🛠 CAMBIO: soporte de intent/role/next en state firmado y fix del REDIRECT_URI
-
 import crypto from "crypto";
 
 const {
@@ -12,7 +10,6 @@ const {
   JWT_SECRET,
 } = process.env;
 
-// 🛠 CAMBIO: Fallback local correctamente formateado
 const REDIRECT_URI =
   GOOGLE_REDIRECT_URI ||
   `http://localhost:${PORT || 3000}/api/auth/google/callback`;

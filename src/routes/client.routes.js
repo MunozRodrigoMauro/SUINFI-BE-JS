@@ -1,3 +1,4 @@
+// src/routes/client.routes.js
 import express from "express";
 import { createClientProfile, getClientProfile } from "../controllers/client.controller.js";
 import { verifyToken } from "../middlewares/auth.middleware.js";

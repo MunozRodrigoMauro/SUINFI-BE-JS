@@ -1,6 +1,4 @@
 // src/models/User.js
-// 🛠 CAMBIO: `role` requerido sin default; `password` requerido sólo si authProvider === 'local'
-
 import mongoose from "mongoose";
 import ProfessionalModel from "./Professional.js";
 import ClientModel from "./Client.js";

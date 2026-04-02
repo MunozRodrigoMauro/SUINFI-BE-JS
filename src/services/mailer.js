@@ -284,9 +284,3 @@ export async function debugVerifySmtp() {
     console.log("⚠️ SMTP deshabilitado o credenciales inválidas. Se usarán logs [DEV].");
   }
 }
-
-/*
-[CAMBIOS HECHOS AQUÍ]
-- Se agregó sendServiceSuggestionEmail para mandar sugerencias internas a info@cuyit.com.
-- Se reutilizó la infraestructura existente de mail sin tocar los flujos previos de verificación, reset o notificaciones.
-*/

@@ -77,9 +77,3 @@ export const getBlockState = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
-
-/*
-[CAMBIOS HECHOS AQUÍ]
-- Se implementó POST/DELETE de blocks para que Mobile deje de recibir 404.
-- Se agregó endpoint opcional de estado para que el FE pueda leer blockedByMe/blockedByOther si lo necesita.
-*/

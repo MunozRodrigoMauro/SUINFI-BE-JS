@@ -19,8 +19,3 @@ router.post("/:otherUserId", blockUser);
 router.delete("/:otherUserId", unblockUser);
 
 export default router;
-
-/*
-[CAMBIOS HECHOS AQUÍ]
-- Se agregaron rutas /api/blocks/:otherUserId (POST/DELETE) y /state para consultar estado.
-*/

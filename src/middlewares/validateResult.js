@@ -31,9 +31,3 @@ export const validateResult = (req, res, next) => {
   // Si no hay errores, pasamos al siguiente paso (el controlador)
   next(); // Llama a la siguiente función en la cadena (en este caso: createUser)
 };
-
-/*
-[CAMBIOS HECHOS AQUÍ]
-- Se agregó `message` con el primer error para que el frontend muestre un texto claro.
-- Se mantuvo `errors` para no romper compatibilidad con otras pantallas.
-*/

@@ -161,11 +161,3 @@ export const suggestService = async (req, res) => {
     });
   }
 };
-
-/*
-[CAMBIOS HECHOS AQUÍ]
-- Se mantuvo createService compatible con category, aliases y tags.
-- Se mantiene getServices buscando por nombre, descripción, aliases, tags y categoría.
-- Se agregó suggestService para recibir sugerencias de servicios faltantes desde Mobile.
-- suggestService usa el usuario autenticado y dispara un mail interno sin cambiar el contrato principal del front.
-*/

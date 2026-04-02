@@ -1,3 +1,4 @@
+// src/controllers/points.controller.js
 import { getBalance, getHistory } from "../services/points.service.js";
 
 export const getMyPoints = async (req, res) => {

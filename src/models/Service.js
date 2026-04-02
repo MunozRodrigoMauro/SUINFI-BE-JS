@@ -74,10 +74,3 @@ serviceSchema.pre("save", function (next) {
 // Creamos el modelo y lo exportamos
 const ServiceModel = mongoose.model("Service", serviceSchema);
 export default ServiceModel;
-
-/*
-[CAMBIOS HECHOS AQUÍ]
-- Se agregaron los campos `aliases` y `tags` al modelo Service.
-- Se normalizan y deduplican `aliases` y `tags` antes de guardar.
-- Se mantuvo intacta la estructura principal del modelo para no romper el front.
-*/

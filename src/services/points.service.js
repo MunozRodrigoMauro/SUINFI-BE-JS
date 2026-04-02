@@ -1,3 +1,4 @@
+// src/services/points.service.js
 import PointsAccount from "../models/PointsAccount.js";
 import PointsTransaction, { POINT_TYPES } from "../models/PointsTransaction.js";
 import Reward from "../models/Reward.js";

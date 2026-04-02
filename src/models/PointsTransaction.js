@@ -1,3 +1,4 @@
+// src/models/PointsTransaction.js
 import mongoose from "mongoose";
 
 export const POINT_TYPES = {

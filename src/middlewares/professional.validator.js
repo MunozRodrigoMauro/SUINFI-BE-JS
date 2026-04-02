@@ -1,6 +1,6 @@
+// src/middlewares/professional.validator.js
 import { body } from "express-validator";
 
-/** (lo que ya tenías)… */
 
 export const patchMyProfessionalRules = [
   body("address").optional().isObject().withMessage("address debe ser un objeto"),
@@ -16,7 +16,10 @@ export const patchMyProfessionalRules = [
   .isString()
   .trim()
   .isLength({ max: 300 })
-  .isURL({ require_protocol: true })
+  .custom((value) => {
+    if (value === "") return true;
+    return /^https?:\/\/.+/i.test(String(value));
+  })
   .withMessage("linkedinUrl debe ser una URL válida con http(s)"),
 ];
 

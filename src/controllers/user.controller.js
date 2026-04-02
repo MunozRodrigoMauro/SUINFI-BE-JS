@@ -450,10 +450,3 @@ export const removeMyPushToken = async (req, res) => {
     return res.status(500).json({ message: "Error del servidor" });
   }
 };
-
-/*
-[CAMBIOS HECHOS AQUÍ]
-- Se tradujeron al español los mensajes visibles al usuario que estaban en inglés.
-- Se mantuvieron intactas las validaciones, flujos y códigos existentes.
-- Se corrigió un bug en updateMe: al capitalizar name ahora toma req.body.name y no payload.name.
-*/

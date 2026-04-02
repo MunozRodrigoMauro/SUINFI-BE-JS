@@ -1,3 +1,4 @@
+// src/routes/admin.routes.js
 import express from "express";
 import { createAdminProfile, getAdminProfile } from "../controllers/admin.controller.js";
 import { verifyToken } from "../middlewares/auth.middleware.js";

@@ -405,13 +405,3 @@ mongoose
     // eslint-disable-next-line no-console
     console.error("❌ Error al conectar a Mongo:", err);
   });
-
-/*
-[CAMBIOS HECHOS AQUÍ]
-- Se importó y montó blocksRoutes para habilitar /api/blocks y eliminar el 404 del Mobile.
-*/
-
-/*
-[CAMBIOS HECHOS AQUÍ - REPORTES]
-- Se importó y montó reportsRoutes para habilitar /api/reports.
-*/

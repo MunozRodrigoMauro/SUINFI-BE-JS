@@ -1,3 +1,4 @@
+// src/models/Redemption.js
 import mongoose from "mongoose";
 
 export const REDEMPTION_STATUS = { ISSUED: "ISSUED", REDEEMED: "REDEEMED", CANCELLED: "CANCELLED" };

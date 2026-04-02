@@ -1,3 +1,4 @@
+// src/controllers/payment.admin.controller.js
 import mongoose from "mongoose";
 import Payment from "../models/Payment.js";
 import Booking from "../models/Booking.js";

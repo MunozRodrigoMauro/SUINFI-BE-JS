@@ -1,3 +1,4 @@
+// src/routes/rewards.routes.js
 import { Router } from "express";
 import { verifyToken } from "../middlewares/auth.middleware.js";
 import { getRewards, redeem } from "../controllers/rewards.controller.js";

@@ -1,3 +1,4 @@
+// src/seed/admin.seed.js
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import { faker } from "@faker-js/faker/locale/es";

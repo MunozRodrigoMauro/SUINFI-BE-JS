@@ -573,9 +573,3 @@ export async function forceImmediateFallback({ io, bookingId }) {
 export function getFallbackConstants() {
   return { FALLBACK_AFTER_MS, EXPIRE_AFTER_MS };
 }
-
-/*
-✅ [CAMBIO] BLOCKS:
-- pickNextProfessionalForImmediate: nuevo parámetro excludeUserIds + filtro en query (q.user $nin).
-- forceImmediateFallback (cron/fallback): calcula bloqueados del cliente y los excluye del matcher.
-*/

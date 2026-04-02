@@ -1,6 +1,4 @@
 // src/controllers/auth.controller.js
-// (Se mantiene tu lógica local. No agrega rutas Google aquí.)
-// 🛠 CAMBIO: SIN cambios funcionales salvo mantener exactamente tu código.
 
 import UserModel from "../models/User.js";
 import bcrypt from "bcrypt";
@@ -247,12 +245,3 @@ export const debugRegenerateToken = async (req, res) => {
     return res.status(500).json({ message: "Error del servidor" });
   }
 };
-
-/*
-[CAMBIOS HECHOS AQUÍ]
-- En confirmPasswordReset se alineó la validación de símbolo con el registro/mobile:
-  ahora acepta cualquier carácter no alfanumérico, por ejemplo ".".
-- Se cambió el mensaje final de token inválido por uno más claro para usuario:
-  "El enlace no es válido o venció".
-- Se mantuvo intacta la lógica del resto del archivo.
-*/

@@ -308,10 +308,3 @@ export const typing = async (req, res) => {
 
   res.json({ ok: true });
 };
-
-/*
-[CAMBIOS HECHOS AQUÍ]
-- Se agregó devolución de flags de bloqueo (blockedByMe/blockedByOther) en listMyChats y getOrCreateWithOther.
-- Se evitó tirar 403 en lecturas (with/messages/read) para que el FE pueda mostrar historial + permitir “Desbloquear”.
-- Se mantiene 403 en createMessage/typing (seguridad: no permitir contacto si hay bloqueo).
-*/

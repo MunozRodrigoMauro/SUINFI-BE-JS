@@ -1,3 +1,4 @@
+// src/controllers/rewards.controller.js
 import mongoose from "mongoose";
 import { listRewards, redeemReward } from "../services/points.service.js";
 

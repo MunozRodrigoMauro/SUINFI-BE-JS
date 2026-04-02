@@ -1,17 +1,5 @@
 // src/seed/seedServicesAndCategories.js
 
-/**
- * SUINFI – Seed de Categorías y Servicios (versión jerárquica plana, limpia)
- *
- * Cambios:
- * - [CAMBIO MAYOR] Se elimina la generación de "tareas por subcategoría". Ahora solo guardamos OFICIOS/ROLES.
- * - [CAMBIO] Se elimina la familia "Desarrollo de software · …". Queda un solo servicio "Desarrollo de software"
- *            bajo "Ingenierías · Sistemas", como pediste.
- * - [CAMBIO] Se crea `__servicesByCategory` con oficios por categoría (ampliado y sin duplicados por género en ingeniería).
- * - [LIMPIEZA] Se quitan servicios-tarea heredados y prefijos "OFICIO - TAREA".
- * - [SIN CAMBIOS] Modelos, conexión y `seedDB` intactos.
- */
-
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 

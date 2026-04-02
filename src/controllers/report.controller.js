@@ -199,10 +199,3 @@ export const updateReportStatus = async (req, res) => {
   if (!report) return res.status(404).json({ message: "Report no encontrado" });
   res.json(report);
 };
-
-/*
-[CAMBIOS HECHOS AQUÍ]
-- Al crear una denuncia (createReport) se envía email a REPORTS_EMAIL || "info@cuyit.com" usando sendNotificationEmail().
-- El envío de email es “fire-and-forget” y NO rompe la creación de la denuncia si falla.
-- Se evitó console.* y se agregó helper para code 11000 sin usar any.
-*/

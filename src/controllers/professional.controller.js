@@ -928,10 +928,3 @@ export const updateMyPayout = async (req, res) => {
     res.status(500).json({ message: "Error del servidor" });
   }
 };
-
-/*
-[CAMBIOS HECHOS AQUÍ]
-- Se tradujeron al español los mensajes visibles al usuario que estaban en inglés.
-- Se mantuvieron intactas las validaciones, filtros, blocks y lógica existente.
-- No se tocaron los códigos o mensajes internos tipo "blocked" / "SUSPENDED" para no romper integraciones ya existentes.
-*/

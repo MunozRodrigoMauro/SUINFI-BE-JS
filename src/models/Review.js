@@ -1,3 +1,4 @@
+// src/models/Review.js
 import mongoose from "mongoose";
 
 const photoSchema = new mongoose.Schema(

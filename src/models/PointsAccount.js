@@ -1,3 +1,4 @@
+// src/models/PointsAccount.js
 import mongoose from "mongoose";
 
 const PointsAccountSchema = new mongoose.Schema(

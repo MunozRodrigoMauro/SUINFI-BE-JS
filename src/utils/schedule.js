@@ -1,6 +1,4 @@
 // src/utils/schedule.js
-// ✅ FIX: no depender de process.env.TZ (muchos servers lo setean a otra zona y rompe el schedule).
-// ✅ FIX: obtener hour/minute/weekday de forma consistente (formatToParts) para evitar “mezclas” en cambios de minuto/hora.
 const TZ = process.env.APP_TIMEZONE || "America/Argentina/Buenos_Aires";
 
 const DAY_KEYS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
@@ -88,9 +86,3 @@ export default function isNowWithinSchedule(availabilitySchedule = {}) {
 
   return isTimeInRangeMin(nowMin, fromMin, toMin);
 }
-
-/*
-[CAMBIOS HECHOS AQUÍ]
-- Se dejó de usar process.env.TZ (puede venir seteado por el server con otra zona y apaga antes).
-- nowZoned() ahora usa formatToParts para obtener hour/minute/weekday consistente.
-*/

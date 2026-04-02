@@ -77,8 +77,3 @@ export async function assertNotBlocked(me, otherUserId) {
     throw err;
   }
 }
-
-/*
-[CAMBIOS HECHOS AQUÍ]
-- Se agregó getBlockState() y getBlockSetsForMe() para poder devolver flags a FE y evitar 403 en lecturas si querés mostrar el estado.
-*/

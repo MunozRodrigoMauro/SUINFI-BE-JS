@@ -217,11 +217,3 @@ export function registerInstantBookingsCron(io) {
     }
   });
 }
-
-/*
-[CAMBIOS HECHOS AQUÍ]
-- Se agregó expiración automática de reservas programadas (no inmediatas) si quedan en "pending" por más de 24hs:
-  - const SCHEDULED_EXPIRE_AFTER_MS
-  - helper expireScheduledBooking()
-  - bloque (4) dentro del cron que busca y expira esas reservas
-*/

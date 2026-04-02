@@ -1,11 +1,8 @@
 // src/controllers/oauth.controller.js
-// 🛠 CAMBIO: FE_BASE ahora se toma de APP_PUBLIC_URL (o WEB_APP_URL/FRONTEND_URL) con fallback seguro a https://www.cuyit.com
-//            Además, en el redirect de éxito incluimos role para mayor claridad.
-//            Resto de la lógica intacta.
 
 import jwt from "jsonwebtoken";
 import UserModel from "../models/User.js";
-import { ensureProfileByRole } from "../services/ensureProfile.js"; // mantenemos tu import existente
+import { ensureProfileByRole } from "../services/ensureProfile.js";
 import {
   getGoogleAuthURL,
   getTokens,
@@ -16,12 +13,12 @@ import {
 const {
   JWT_SECRET,
   JWT_EXPIRES_IN,
-  APP_PUBLIC_URL, // 🛠 CAMBIO: usamos esta var (es la que tenés en .env del backend)
-  WEB_APP_URL, // soportamos también por compatibilidad
-  FRONTEND_URL, // soportamos también por compatibilidad
+  APP_PUBLIC_URL,
+  WEB_APP_URL,
+  FRONTEND_URL,
 } = process.env;
 
-// 🛠 CAMBIO: Base del frontend, sin slash final. Fallback a prod seguro.
+
 const FE_BASE = (APP_PUBLIC_URL || WEB_APP_URL || FRONTEND_URL || "https://www.cuyit.com").replace(
   /\/+$/,
   ""

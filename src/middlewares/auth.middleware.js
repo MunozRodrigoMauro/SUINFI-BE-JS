@@ -58,9 +58,3 @@ export const requireAdmin = (req, res, next) => {
   }
   next();
 };
-
-/*
-[CAMBIOS HECHOS AQUÍ]
-- Se tradujeron al español los mensajes visibles al usuario que estaban en inglés.
-- Se mantuvo la lógica actual del middleware intacta.
-*/
